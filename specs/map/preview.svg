@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" font-family="sans-serif">
+<rect width="100%" height="100%" fill="#2e5f80"/>
+<defs><clipPath id="land"><polygon points="0,685 50,695 90,710 115,735 125,765 145,755 170,765 205,780 235,790 260,780 265,740 280,715 320,705 360,715 390,745 430,735 470,755 510,775 560,780 600,770 600,190 550,160 490,130 430,115 360,110 320,90 300,50 280,10 220,5 170,20 145,60 130,95 100,110 70,105 40,85 15,60 0,55"/></clipPath></defs>
+<g clip-path="url(#land)">
+<rect x="0.0" y="0.0" width="100.0" height="100.0" fill="#2e5f80"/>
+<rect x="100.0" y="0.0" width="100.0" height="100.0" fill="#c9a66b"/>
+<rect x="200.0" y="0.0" width="100.0" height="100.0" fill="#c9a66b"/>
+<rect x="300.0" y="0.0" width="100.0" height="100.0" fill="#2e5f80"/>
+<rect x="400.0" y="0.0" width="100.0" height="100.0" fill="#2e5f80"/>
+<rect x="500.0" y="0.0" width="100.0" height="100.0" fill="#2e5f80"/>
+<rect x="0.0" y="100.0" width="100.0" height="100.0" fill="#c9a66b"/>
+<rect x="100.0" y="100.0" width="100.0" height="100.0" fill="#c9a66b"/>
+<rect x="200.0" y="100.0" width="100.0" height="100.0" fill="#c9a66b"/>
+<rect x="300.0" y="100.0" width="100.0" height="100.0" fill="#4f7d45"/>
+<rect x="400.0" y="100.0" width="100.0" height="100.0" fill="#4f7d45"/>
+<rect x="500.0" y="100.0" width="100.0" height="100.0" fill="#2e5f80"/>
+<rect x="0.0" y="200.0" width="100.0" height="100.0" fill="#3f7f8f"/>
+<rect x="100.0" y="200.0" width="100.0" height="100.0" fill="#3f7f8f"/>
+<rect x="200.0" y="200.0" width="100.0" height="100.0" fill="#3f7f8f"/>
+<rect x="300.0" y="200.0" width="100.0" height="100.0" fill="#4f7d45"/>
+<rect x="400.0" y="200.0" width="100.0" height="100.0" fill="#4f7d45"/>
+<rect x="500.0" y="200.0" width="100.0" height="100.0" fill="#4f7d45"/>
+<rect x="0.0" y="300.0" width="100.0" height="100.0" fill="#3f7f8f"/>
+<rect x="100.0" y="300.0" width="100.0" height="100.0" fill="#3f7f8f"/>
+<rect x="200.0" y="300.0" width="100.0" height="100.0" fill="#3f7f8f"/>
+<rect x="300.0" y="300.0" width="100.0" height="100.0" fill="#3f7f8f"/>
+<rect x="400.0" y="300.0" width="100.0" height="100.0" fill="#4f7d45"/>
+<rect x="500.0" y="300.0" width="100.0" height="100.0" fill="#c98f6b"/>
+<rect x="0.0" y="400.0" width="100.0" height="100.0" fill="#6f9a5c"/>
+<rect x="100.0" y="400.0" width="100.0" height="100.0" fill="#6f9a5c"/>
+<rect x="200.0" y="400.0" width="100.0" height="100.0" fill="#3f7f8f"/>
+<rect x="300.0" y="400.0" width="100.0" height="100.0" fill="#4f7d45"/>
+<rect x="400.0" y="400.0" width="100.0" height="100.0" fill="#c98f6b"/>
+<rect x="500.0" y="400.0" width="100.0" height="100.0" fill="#c98f6b"/>
+<rect x="0.0" y="500.0" width="100.0" height="100.0" fill="#a8a29a"/>
+<rect x="100.0" y="500.0" width="100.0" height="100.0" fill="#6f9a5c"/>
+<rect x="200.0" y="500.0" width="100.0" height="100.0" fill="#d8d2c4"/>
+<rect x="300.0" y="500.0" width="100.0" height="100.0" fill="#d8d2c4"/>
+<rect x="400.0" y="500.0" width="100.0" height="100.0" fill="#c98f6b"/>
+<rect x="500.0" y="500.0" width="100.0" height="100.0" fill="#c98f6b"/>
+<rect x="0.0" y="600.0" width="100.0" height="100.0" fill="#a8a29a"/>
+<rect x="100.0" y="600.0" width="100.0" height="100.0" fill="#a8a29a"/>
+<rect x="200.0" y="600.0" width="100.0" height="100.0" fill="#d8d2c4"/>
+<rect x="300.0" y="600.0" width="100.0" height="100.0" fill="#d8d2c4"/>
+<rect x="400.0" y="600.0" width="100.0" height="100.0" fill="#e8e2cf"/>
+<rect x="500.0" y="600.0" width="100.0" height="100.0" fill="#bdbdbd"/>
+<rect x="0.0" y="700.0" width="100.0" height="100.0" fill="#2e5f80"/>
+<rect x="100.0" y="700.0" width="100.0" height="100.0" fill="#a8a29a"/>
+<rect x="200.0" y="700.0" width="100.0" height="100.0" fill="#d8d2c4"/>
+<rect x="300.0" y="700.0" width="100.0" height="100.0" fill="#2e5f80"/>
+<rect x="400.0" y="700.0" width="100.0" height="100.0" fill="#e8e2cf"/>
+<rect x="500.0" y="700.0" width="100.0" height="100.0" fill="#bdbdbd"/>
+</g>
+<polygon points="150,785 170,790 175,775 155,770" fill="#4f7d45"/>
+<polygon points="330,40 360,35 355,15 330,20" fill="#4f7d45"/>
+<polyline points="0,55 10,70 25,140 15,220 40,300 30,370 10,440 30,520 15,600 0,685" fill="none" stroke="#111" stroke-width="3" stroke-dasharray="8 6"/>
+<polyline points="600,770 595,770 600,680 590,580 570,510 585,450 560,370 590,300 570,240 600,190" fill="none" stroke="#111" stroke-width="3" stroke-dasharray="8 6"/>
+<polyline points="30,10 50,150 150,300 130,440 120,520 140,650 130,800" fill="none" stroke="#2e5f80" stroke-width="14" stroke-linejoin="round"/>
+<polyline points="250,150 350,250 430,370 450,460 300,580" fill="none" stroke="#f2c14e" stroke-width="5" stroke-linejoin="round"/>
+<polyline points="220,180 320,280 280,360 180,470 180,620" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="300,580 460,560 540,540 530,680" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="240,760 270,680 360,670 450,710" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="135,755 150,770 160,780" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="515,755 515,605" fill="none" stroke="#555" stroke-width="5" stroke-linejoin="round"/>
+<polyline points="585,750 585,600" fill="none" stroke="#555" stroke-width="5" stroke-linejoin="round"/>
+<circle cx="230" cy="60" r="5" fill="#d7263d" stroke="#fff"/><text x="237" y="64" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">container-port</text>
+<circle cx="260" cy="160" r="5" fill="#d7263d" stroke="#fff"/><text x="267" y="164" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">free-zone</text>
+<circle cx="160" cy="140" r="5" fill="#d7263d" stroke="#fff"/><text x="167" y="144" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">neto-building</text>
+<circle cx="130" cy="180" r="5" fill="#d7263d" stroke="#fff"/><text x="137" y="184" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">colon-ballfield</text>
+<circle cx="50" cy="150" r="5" fill="#d7263d" stroke="#fff"/><text x="57" y="154" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">atlantic-locks</text>
+<circle cx="150" cy="300" r="5" fill="#d7263d" stroke="#fff"/><text x="157" y="304" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">lake-islands</text>
+<circle cx="430" cy="370" r="5" fill="#d7263d" stroke="#fff"/><text x="437" y="374" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">ridge-overlook</text>
+<circle cx="450" cy="135" r="5" fill="#d7263d" stroke="#fff"/><text x="457" y="139" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">caribbean-cove</text>
+<circle cx="130" cy="440" r="5" fill="#d7263d" stroke="#fff"/><text x="137" y="444" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">gamboa</text>
+<circle cx="70" cy="470" r="5" fill="#d7263d" stroke="#fff"/><text x="77" y="474" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">cable-bridge</text>
+<circle cx="140" cy="650" r="5" fill="#d7263d" stroke="#fff"/><text x="147" y="654" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">pacific-locks</text>
+<circle cx="120" cy="690" r="5" fill="#d7263d" stroke="#fff"/><text x="127" y="694" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">balboa-port</text>
+<circle cx="180" cy="620" r="5" fill="#d7263d" stroke="#fff"/><text x="187" y="624" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">albrook</text>
+<circle cx="130" cy="760" r="5" fill="#d7263d" stroke="#fff"/><text x="137" y="764" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">arch-bridge</text>
+<circle cx="240" cy="760" r="5" fill="#d7263d" stroke="#fff"/><text x="247" y="764" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">old-quarter</text>
+<circle cx="220" cy="720" r="5" fill="#d7263d" stroke="#fff"/><text x="227" y="724" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">tito-city-room</text>
+<circle cx="270" cy="680" r="5" fill="#d7263d" stroke="#fff"/><text x="277" y="684" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">coastal-avenue</text>
+<circle cx="310" cy="610" r="5" fill="#d7263d" stroke="#fff"/><text x="317" y="614" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">taller-safehouse</text>
+<circle cx="360" cy="670" r="5" fill="#d7263d" stroke="#fff"/><text x="367" y="674" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">firm-tower</text>
+<circle cx="380" cy="690" r="5" fill="#d7263d" stroke="#fff"/><text x="387" y="694" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">valeria-penthouse</text>
+<circle cx="280" cy="540" r="5" fill="#d7263d" stroke="#fff"/><text x="287" y="544" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">valeria-apartment</text>
+<circle cx="330" cy="570" r="5" fill="#d7263d" stroke="#fff"/><text x="337" y="574" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">tito-tower</text>
+<circle cx="450" cy="710" r="5" fill="#d7263d" stroke="#fff"/><text x="457" y="714" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">gated-community</text>
+<circle cx="450" cy="460" r="5" fill="#d7263d" stroke="#fff"/><text x="457" y="464" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">miguelito-hills</text>
+<circle cx="540" cy="540" r="5" fill="#d7263d" stroke="#fff"/><text x="547" y="544" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">tito-home</text>
+<circle cx="460" cy="560" r="5" fill="#d7263d" stroke="#fff"/><text x="467" y="564" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">corridor-market</text>
+<circle cx="560" cy="630" r="5" fill="#d7263d" stroke="#fff"/><text x="567" y="634" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">passenger-terminal</text>
+<circle cx="530" cy="680" r="5" fill="#d7263d" stroke="#fff"/><text x="537" y="684" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">cargo-terminal</text>
+</svg>

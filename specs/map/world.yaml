@@ -1,0 +1,148 @@
+# TRÁNSITO world spec — source of truth for the map.
+# Conventions: see README.md in this folder. Meters; origin SW corner; +x east, +y north.
+#
+# Two layers:
+#   grid      → AREA BUDGET only (which district owns roughly which km²). Never drawn.
+#   geometry  → what the player actually sees: coastline, playable boundary, islands, routes.
+# District borders in the final map follow roads, rivers, ridges and shorelines — never grid lines.
+
+version: 2
+
+bounds:
+  width: 6000    # x, meters
+  height: 8000   # y, meters
+  cell_size: 1000
+
+# North row first. One character per cell, space-separated. Codes map to districts[].code.
+grid: |
+  S C C S S S
+  C C C J J S
+  L L L J J J
+  L L L L J T
+  G G L J T T
+  B G K K T T
+  B B K K E A
+  S B K S E A
+
+geometry:
+  # Land inside the bounds box (everything outside it is sea). Clockwise from the south-west.
+  # South edge = Pacific coast, north edge = Caribbean coast. West and east edges are land that
+  # continues past the playable boundary (rendered as low-detail "skirt" terrain, never a cliff).
+  land: [
+    # Pacific coast, west → east
+    [0, 1150], [500, 1050], [900, 900], [1150, 650], [1250, 350],      # Balboa, canal mouth
+    [1450, 450], [1700, 350], [2050, 200], [2350, 100], [2600, 200],   # old-quarter peninsula
+    [2650, 600], [2800, 850], [3200, 950], [3600, 850], [3900, 550],   # bayfront curve, Punta Pacífica point
+    [4300, 650], [4700, 450], [5100, 250], [5600, 200], [6000, 300],   # Costa del Este reclaim, airport shore
+    # east land edge
+    [6000, 6100],
+    # Caribbean coast, east → west
+    [5500, 6400], [4900, 6700], [4300, 6850], [3600, 6900], [3200, 7100],
+    [3000, 7500], [2800, 7900], [2200, 7950], [1700, 7800], [1450, 7400], # Colón peninsula
+    [1300, 7050], [1000, 6900], [700, 6950], [400, 7150], [150, 7400],    # Limón Bay inner shore
+    [0, 7450]
+  ]
+
+  # Where the player can go on land. Irregular on purpose; follows natural barriers.
+  # Water is playable out to the bounds box; that edge is hidden by haze and a current that
+  # pushes boats back.
+  playable_boundary:
+    west:   # river + flooded mangrove + steep jungle west of the canal
+      barrier: river-and-mangrove
+      points: [[0, 7450], [100, 7300], [250, 6600], [150, 5800], [400, 5000], [300, 4300],
+               [100, 3600], [300, 2800], [150, 2000], [0, 1150]]
+    east:   # mountain ridge and dense jungle east of the airport and the hills
+      barrier: ridge-and-jungle
+      points: [[6000, 300], [5950, 300], [6000, 1200], [5900, 2200], [5700, 2900], [5850, 3500],
+               [5600, 4300], [5900, 5000], [5700, 5600], [6000, 6100]]
+
+  islands:
+    - { id: causeway-islands, inspired_by: "Amador Causeway islands", points: [[1500, 150], [1700, 100], [1750, 250], [1550, 300]] }
+    - { id: galeta-point,     inspired_by: "Isla Galeta",             points: [[3300, 7600], [3600, 7650], [3550, 7850], [3300, 7800]] }
+    # Gatún Lake islands are generated inside the lake polygon (pipeline), not listed here.
+
+  # Areas where the world deliberately does NOT look like a grid: diagonal canal, curved coasts,
+  # peninsulas. The pipeline must keep these from OSM even after compression.
+  shape_anchors: [canal, colon-peninsula, old-quarter-peninsula, punta-pacifica-point, causeway-islands, limon-bay]
+
+districts:
+  - { id: sea,            code: S, name: Open sea,                inspired_by: "Caribbean Sea (north), Bay of Panama (south)", playable: water, target_km2: 7 }
+  - { id: colon,          code: C, name: Colón,                   inspired_by: "Colón city, Manzanillo port, Colón Free Zone, Agua Clara locks", playable: land, compression: 4, density: high, target_km2: 5 }
+  - { id: gatun-lake,     code: L, name: Gatún Lake,              inspired_by: "Gatún Lake and its islands", playable: water, compression: 10, density: very-low, target_km2: 8 }
+  - { id: jungle-ridge,   code: J, name: Jungle ridge,            inspired_by: "Soberanía / Chagres parks, Panamá–Colón highway and railroad", playable: land, compression: 10, density: very-low, target_km2: 7 }
+  - { id: canal-central,  code: G, name: Central canal,           inspired_by: "Gamboa, Culebra Cut, Centennial Bridge", playable: land, compression: 10, density: low, target_km2: 3 }
+  - { id: pacific-locks,  code: B, name: Pacific locks and Balboa, inspired_by: "Miraflores, Pedro Miguel, Balboa port, Albrook, Bridge of the Americas, Amador", playable: land, compression: 4, density: medium, target_km2: 4 }
+  - { id: city-core,      code: K, name: City core,               inspired_by: "Casco Viejo, El Chorrillo, Calidonia, Cinta Costera, banking district, Punta Pacífica, El Cangrejo", playable: land, compression: 3, density: very-high, target_km2: 5 }
+  - { id: costa-del-este, code: E, name: Costa del Este,          inspired_by: "Costa del Este", playable: land, compression: 3, density: medium, target_km2: 2 }
+  - { id: tito-corridor,  code: T, name: The corridor,            inspired_by: "San Miguelito, Juan Díaz, Pedregal, Tocumen town", playable: land, compression: 4, density: high, target_km2: 5 }
+  - { id: airport,        code: A, name: Tocumen airport,         inspired_by: "Tocumen International Airport", playable: land, compression: 4, density: low, target_km2: 2 }
+
+# Hero and anchor locations. `district` must match the grid cell containing (x, y).
+# Unless `on_water: true`, the point must be inside geometry.land.
+landmarks:
+  # Colón
+  - { id: container-port,   district: colon,          x: 2300, y: 7400, kind: industrial,  notes: "Neto's crane yard; gantry cranes, stacks, rail spur" }
+  - { id: free-zone,        district: colon,          x: 2600, y: 6400, kind: industrial,  notes: "walled warehouse grid, guarded gates" }
+  - { id: neto-building,    district: colon,          x: 1600, y: 6600, kind: residential, notes: "old-town tenement; Neto's block" }
+  - { id: colon-ballfield,  district: colon,          x: 1300, y: 6200, kind: civic,       notes: "the field that floods" }
+  - { id: atlantic-locks,   district: colon,          x: 500,  y: 6500, kind: canal,       notes: "Atlantic locks; canal staff to bribe in Act 3" }
+
+  # Lake / jungle / central canal
+  - { id: lake-islands,     district: gatun-lake,     x: 1500, y: 5000, kind: nature,      on_water: true, notes: "jungle islands along the shipping channel" }
+  - { id: ridge-overlook,   district: jungle-ridge,   x: 4300, y: 4300, kind: nature,      notes: "highway summit; both oceans on screen" }
+  - { id: caribbean-cove,   district: jungle-ridge,   x: 4500, y: 6650, kind: nature,      notes: "hidden Caribbean cove east of Colón; El Consorcio's landing point (Act 6)" }
+  - { id: gamboa,           district: canal-central,  x: 1300, y: 3600, kind: town,        notes: "old canal-zone village, dredge yard" }
+  - { id: cable-bridge,     district: canal-central,  x: 700,  y: 3300, kind: bridge,      on_water: true, notes: "cable-stayed highway bridge over the cut" }
+
+  # Pacific side
+  - { id: pacific-locks,    district: pacific-locks,  x: 1400, y: 1500, kind: canal,       notes: "two-step Pacific locks, visitor center" }
+  - { id: balboa-port,      district: pacific-locks,  x: 1200, y: 1100, kind: industrial,  notes: "Pacific container terminal; Los Muelles territory" }
+  - { id: albrook,          district: pacific-locks,  x: 1800, y: 1800, kind: transit,     notes: "bus terminal, mall, railroad terminus" }
+  - { id: arch-bridge,      district: pacific-locks,  x: 1300, y: 400,  kind: bridge,      on_water: true, notes: "steel arch bridge over the canal entrance" }
+
+  # City
+  - { id: old-quarter,      district: city-core,      x: 2400, y: 400,  kind: historic,    notes: "Casco Viejo-inspired peninsula" }
+  - { id: tito-city-room,   district: city-core,      x: 2200, y: 800,  kind: residential, notes: "El Chorrillo-inspired block next to the old quarter; Tito's rented room from Act 2" }
+  - { id: coastal-avenue,   district: city-core,      x: 2700, y: 1200, kind: road,        notes: "bayfront boulevard and park" }
+  - { id: taller-safehouse, district: city-core,      x: 3100, y: 1900, kind: industrial,  notes: "Calidonia-style auto shop; La Firma safehouse; Tito's first job with Valeria; seen on the CCTV in Act 5" }
+  - { id: firm-tower,       district: city-core,      x: 3600, y: 1300, kind: office,      notes: "Valeria's legitimate front: a consulting/legal firm in a glass tower" }
+  - { id: valeria-penthouse,district: city-core,      x: 3800, y: 1100, kind: residential, notes: "Punta Pacífica-style penthouse" }
+  - { id: valeria-apartment,district: city-core,      x: 2800, y: 2600, kind: residential, notes: "El Cangrejo-style mid-rise; her first Panama home, kept as a memory" }
+  - { id: tito-tower,       district: city-core,      x: 3300, y: 2300, kind: office,      notes: "the tower Tito buys in Act 4" }
+  - { id: gated-community,  district: costa-del-este, x: 4500, y: 900,  kind: residential, notes: "Los Muelles leadership; final battle staging" }
+
+  # Corridor / airport
+  - { id: miguelito-hills,  district: tito-corridor,  x: 4500, y: 3400, kind: residential, notes: "steep informal hillside streets; Kenny's crew" }
+  - { id: tito-home,        district: tito-corridor,  x: 5400, y: 2600, kind: residential, notes: "Tito's family house, under the flight path; Act 1 ends here" }
+  - { id: corridor-market,  district: tito-corridor,  x: 4600, y: 2400, kind: commercial,  notes: "Doña Mireya's shop, bus stops, delivery hub" }
+  - { id: passenger-terminal, district: airport,      x: 5600, y: 1700, kind: transit,     notes: "passenger terminal and drop-off" }
+  - { id: cargo-terminal,   district: airport,        x: 5300, y: 1200, kind: industrial,  notes: "airside apron" }
+
+# Polylines (x, y waypoints). Pipeline snaps them to real OSM geometry after compression.
+routes:
+  canal:
+    kind: waterway
+    points: [[300, 7900], [500, 6500], [1500, 5000], [1300, 3600], [1200, 2800], [1400, 1500], [1300, 0]]
+  transisthmian-highway:
+    kind: highway
+    points: [[2500, 6500], [3500, 5500], [4300, 4300], [4500, 3400], [3000, 2200]]
+  railroad:
+    kind: rail
+    points: [[2200, 6200], [3200, 5200], [2800, 4400], [1800, 3300], [1800, 1800]]
+  corridor-avenue:
+    kind: arterial
+    points: [[3000, 2200], [4600, 2400], [5400, 2600], [5300, 1200]]
+  coastal-avenue:
+    kind: arterial
+    points: [[2400, 400], [2700, 1200], [3600, 1300], [4500, 900]]
+  causeway:
+    kind: road
+    points: [[1350, 450], [1500, 300], [1600, 200]]
+  runway-1:
+    kind: runway
+    width: 45
+    points: [[5150, 450], [5150, 1950]]
+  runway-2:
+    kind: runway
+    width: 45
+    points: [[5850, 500], [5850, 2000]]

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.vite/
+*.log
+.DS_Store
+.env*
+test-results/
+playwright-report/
+
+# Story spoilers kept local only (history rewrite pending)
+specs/story/premise.md
