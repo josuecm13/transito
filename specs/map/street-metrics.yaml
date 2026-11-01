@@ -1,0 +1,96 @@
+# TRÁNSITO — frozen street-network reference metrics (issue #7).
+#
+# Real sectors referenced by world.yaml `street_styles.districts.<id>.reference` (matched by name).
+# Extracted ONCE, offline, from the geospatial-reconstruction-engine PostGIS database (OSM data).
+# The game never imports real streets: these numbers only define the realism band the generated
+# network is tested against.
+#
+# Definitions:
+#   - Blocks: polygons from the engine's `blocks` table, EXCLUDING is_median and is_clipped.
+#     block_area_* are the p10 / median / p90 of their area (m²).
+#   - Nodes: degree over UNIQUE UNDIRECTED edges (u = least(from, to), v = greatest(from, to)).
+#     Degree-2 nodes are EXCLUDED (they are joints inside one street and depend on how OSM splits
+#     ways). dead_end_share = degree 1, t_share = degree 3, x_share = degree ≥ 4, as fractions of
+#     the remaining nodes. intersections_per_km2 counts those remaining nodes per km² of sector.
+#   - street_km_per_km2: total length of unique edges (km) per km² of sector.
+#   - mean_segment_m: mean length of unique edges (m).
+#   - km2: st_area(bbox::geography) / 1e6.
+# Known gap: the engine does not import footway/path/steps, so alleys and stairs of informal
+#   barrios are missing from La Carpio's numbers (real density is higher).
+#
+# method: map-data = every entry below is written by `npm run references` (tools/reference-sectors.mjs):
+# the engine's map-data for the sector, measured by src/world/street-metrics.ts (the single metric
+# definition). The SQL query below produced the original values and is kept as the cross-check.
+
+query: |
+  with a as (select id, place_name, st_area(bbox::geography)/1e6 km2 from import_areas where place_name in ('Santa Ana','La Carpio')),
+  b as (select import_area_id, percentile_cont(array[0.1,0.5,0.9]) within group (order by area_square_meters) q, count(*) n
+        from blocks where not is_median and not is_clipped group by 1),
+  e as (select distinct n.import_area_id, least(from_node_id,to_node_id) u, greatest(from_node_id,to_node_id) v, s.distance_meters
+        from road_segments s join navigable_nodes n on n.id = s.from_node_id),
+  d as (select import_area_id, node, count(*) deg from (select import_area_id, u node from e union all select import_area_id, v from e) x group by 1,2),
+  dd as (select import_area_id, avg((deg=1)::int) dead, avg((deg=3)::int) t3, avg((deg>=4)::int) x4, count(*) inter from d where deg <> 2 group by 1),
+  l as (select import_area_id, sum(distance_meters)/1000 km, avg(distance_meters) seg from e group by 1)
+  select a.place_name, a.km2, b.n, b.q, dd.dead, dd.t3, dd.x4, dd.inter/a.km2, l.km/a.km2, l.seg
+  from a join b on b.import_area_id = a.id join dd on dd.import_area_id = a.id join l on l.import_area_id = a.id;
+
+references:
+  La Carpio:
+    place_name: "La Carpio"
+    import_area_id: 6320bab5-c7e1-436d-a7bd-c542ee355cb7
+    bbox: [-84.1560494, 9.9581759, -84.1430313, 9.9666528]
+    km2: 1.3383990621123585
+    extracted: "2026-10-31"
+    source: "geospatial-reconstruction-engine GET /import-areas/6320bab5-c7e1-436d-a7bd-c542ee355cb7/map-data?mode=filter"
+    attribution: "© OpenStreetMap contributors"
+    method: map-data
+    metrics:
+      blocks_measured: 53
+      block_area_p10_m2: 2571.509771051863
+      block_area_median_m2: 6053.310631058179
+      block_area_p90_m2: 14728.78847741571
+      dead_end_share: 0.3
+      t_share: 0.6
+      x_share: 0.1
+      intersections_per_km2: 156.90387564121778
+      street_km_per_km2: 19.483873902580232
+      mean_segment_m: 93.46666149651915
+  Santa Ana:
+    place_name: "Santa Ana"
+    import_area_id: df082f58-1e9c-416b-b110-beac5492e128
+    bbox: [-79.5511906, 8.9461305, -79.5203161, 8.9723801]
+    km2: 9.857293672110739
+    extracted: "2026-10-31"
+    source: "geospatial-reconstruction-engine GET /import-areas/df082f58-1e9c-416b-b110-beac5492e128/map-data?mode=filter"
+    attribution: "© OpenStreetMap contributors"
+    method: map-data
+    metrics:
+      blocks_measured: 477
+      block_area_p10_m2: 485.04958288548517
+      block_area_median_m2: 4304.754586415918
+      block_area_p90_m2: 15211.42355083202
+      dead_end_share: 0.224937343358396
+      t_share: 0.6322055137844611
+      x_share: 0.14285714285714285
+      intersections_per_km2: 161.9105662353924
+      street_km_per_km2: 15.946345019672009
+      mean_segment_m: 67.43363614573467
+
+# Realism band: how far a generated district's metrics may sit from its reference.
+# Taken as the proposal in issue #7 ("Banda de realismo"); reviewable by the director.
+#   *_rel = relative tolerance (0.35 = ±35% of the reference value)
+#   node_share_abs = absolute tolerance on dead_end_share / t_share / x_share, as a fraction
+#                    (0.08 = ±8 percentage points)
+band:
+  default:
+    block_area_median_rel: 0.35
+    block_area_p90_rel: 0.50
+    node_share_abs: 0.08
+    intersections_per_km2_rel: 0.30
+    street_km_per_km2_rel: 0.30
+  overrides:
+    # Small sample (53 blocks) → wider band.
+    La Carpio:
+      block_area_median_rel: 0.45
+      block_area_p90_rel: 0.60
+      node_share_abs: 0.10

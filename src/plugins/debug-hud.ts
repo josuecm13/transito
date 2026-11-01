@@ -25,8 +25,10 @@ export const debugHud: GamePlugin = {
         const p = players.first;
         const at = p ? sceneToSpec(p.position) : undefined;
         const tito = at ? `${at.x.toFixed(1)},${at.y.toFixed(1)}` : '-';
+        // Previous frame's stats: this system runs before view.render() resets them.
+        const r = c.view.renderer.info.render;
         box.textContent =
-          `FPS ${fps.toFixed(0)}\nEntities ${c.ecs.entities.length}\nBackend ${c.view.backend}` +
+          `FPS ${fps.toFixed(0)}\nDraws ${r.drawCalls} Tris ${(r.triangles / 1000).toFixed(1)}k\nEntities ${c.ecs.entities.length}\nBackend ${c.view.backend}` +
           `\nTito ${tito}\nPeatones ${peds.size}` + (c.pause.paused ? '\nPAUSA' : '');
       },
     });

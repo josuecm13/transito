@@ -3,6 +3,7 @@ import { worldData } from './plugins/world-data.ts';
 import { worldView } from './plugins/world-view.ts';
 import { worldPhysics } from './plugins/world-physics.ts';
 import { player } from './plugins/player.ts';
+import { vehicle } from './plugins/vehicle.ts';
 import { landmarkTriggers } from './plugins/landmark-triggers.ts';
 import { pedestrians } from './plugins/pedestrians.ts';
 import { cameraFollow } from './plugins/camera-follow.ts';
@@ -18,5 +19,5 @@ const ui = document.getElementById('ui') as HTMLElement;
 await createGame({
   canvas,
   ui,
-  plugins: [worldData, worldView, worldPhysics, player, landmarkTriggers, minimap, pedestrians, cameraFollow, screens, pauseMenu, worldMap, debugHud],
+  plugins: [worldData, worldView, worldPhysics, player, vehicle, landmarkTriggers, minimap, pedestrians, cameraFollow, screens, pauseMenu, worldMap, debugHud],
 });

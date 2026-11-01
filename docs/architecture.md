@@ -1,7 +1,7 @@
 # Architecture
 
 ```
-src/world/    pure: spec parsing, geometry, blockout, path graphs. NO three/rapier/DOM.
+src/world/    pure: spec parsing, geometry, street network + city (streets/), walk graph. NO three/rapier/DOM.
 src/sim/      pure gameplay logic (movement, followers, population, triggers, camera math). NO three/rapier/DOM.
 src/ecs/      miniplex world, component types, System and Plugin contracts
 src/engine/   adapters: renderer (three), physics (rapier), input (DOM), loop
@@ -65,15 +65,31 @@ Shared service keys live in a neutral module (e.g. `src/ecs/` or the owning plug
 Pure pipeline in `src/world/` (`buildWorldData(rawYaml)` in `world-data.ts`):
 
 ```
-world.yaml -> parseWorldSpec -> sliceWorld -> generateBlockout -> buildWalkGraph -> WorldData
+world.yaml -> parseWorldSpec -> sliceWorld -> generateStreets -> deriveCity -> buildWalkGraph -> WorldData
+                                              (streets/: graph    (blocks -> buildable -> land use
+                                               + blocks)           -> parcels -> buildings)
 ```
 
-`WorldData = { spec, slice, buildings, walkGraph }`. Plugins render it (three), build colliders
-from it (rapier) and walk pedestrians on `walkGraph`; they never regenerate it.
+`WorldData = { spec, slice, streets, city, buildings, walkGraph }`:
 
-Rule: fixed rng draw order per candidate. `generateBlockout` draws (fill, width, depth, height)
-for every candidate lot, in that order, before any rejection rule runs, so adding or changing a
-rejection rule never shifts the randomness of other lots. Each district uses its own rng fork.
+- `streets: StreetNetwork` (`streets/generate.ts`): planar street graph (avenues fixed from the spec,
+  collectors / locals from tensor-field streamlines, alleys from organic growth, plus `frame` edges
+  along coast and borders) and its bounded faces, the blocks.
+- `city: City` (`streets/city.ts`): per block buildable area, land use, parcels and buildings.
+- `buildings = city.buildings` (`CityBuilding` = blockout `Building` + parcel and block ids).
+- `walkGraph` (`walk-graph.ts`): sidewalks of every street with sidewalk (both sides, joined at
+  corners, wrapping dead ends), alley centerlines, and `crossing` edges across every arm at each
+  intersection. Built on `joinTouchingDeadEnds(streets.graph)`; `origin[i]` is the street node a
+  walk node belongs to. Nothing walkable lies on a carriageway except crossings.
+
+Plugins render it (three), build colliders from it (rapier) and walk pedestrians on `walkGraph`; they
+never regenerate it. Same yaml -> deep-equal `WorldData`; the active area builds in about 1.1 s in
+Node (`tests/world-data.test.ts` keeps it under 1.5 s).
+
+Rule: fixed rng draw order per candidate. Generators draw every random number a candidate needs
+(e.g. buildings: fill, width, depth, height) before any rejection rule runs, so adding or changing a
+rejection rule never shifts the randomness of others. Each district / pass / block uses its own
+labelled rng fork.
 
 ## Screens & pause
 
@@ -109,10 +125,35 @@ screens.addShortcut('Tab', 'world-map');
 
 `pause-menu` lists "Continuar" (order 0), every contributed entry sorted by `order`, and "Controles" (order 100).
 
+## World view
+
+`world-view` draws the whole city ground as **one** merged mesh (`engine/meshes.ts` `groundMesh`,
+vertex colours, one draw call): block ground by land use (neutral; parks, court blocks and medians
+green), court rectangles with painted lines (`world/court-layout.ts`), runways / rails / canals from
+`slice.streets`, then sidewalks, carriageways by class (alley, local, collector, avenue) and centre
+lines from `world/street-surface.ts` (pure triangle soups from `streets.graph`: one band per edge,
+exact circular joints on the open side of bends and dead ends, full discs at junctions). Sea, land and
+the city ground are drawn first, in that order, without depth writes, so each layer paints over the
+previous one and coplanar layers never z-fight; buildings (one `InstancedMesh`, tone by land use),
+characters and markers write depth as usual. The debug HUD shows FPS, draw calls and triangles.
+
+## Vehicle
+
+- `sim/vehicle.ts` (pure, tested): arcade car model, signed speed + yaw + steering wheel; throttle, brake
+  that reverses once stopped, rolling drag, speed-scaled turn rate (inverted in reverse), handbrake;
+  `contactSpeed` feeds the real displacement back so a wall kills the speed. `world/parking.ts` (pure,
+  tested) picks the start spot: right-hand kerb of a drivable edge near the spawn, clear of buildings and
+  other carriageways.
+- `plugins/vehicle.ts`: kinematic Rapier cuboid moved with a character controller (shape-cast, slide), like
+  Tito, so there is no dynamic vehicle at 5 km coordinates; turning is refused when the rotated box would
+  hit something. E enters/exits (exit under 3 m/s at a free spot beside the driver door): the car takes the
+  `cameraTarget` / `populationFocus` tags, Tito gets `inVehicle` (his collider off, `player-move` idle) and
+  his body follows the car, so minimap, world map and landmark triggers keep reading the `player` entity.
+
 ## Minimap
 
-`ui/minimap-layer.ts` renders the whole active area (sea, land, streets, buildings) into one
-offscreen canvas once at startup. Each frame the `minimap` plugin crops it around Tito with a
+`ui/minimap-layer.ts` renders the whole active area (sea, land, blocks by land use, courts, streets by
+class with their sidewalks, buildings) into one offscreen canvas once at startup. Each frame the `minimap` plugin crops it around Tito with a
 single `drawImage` and draws landmark dots and the heading arrow on top. The pure projection
 (north-up mapping, edge clamping, yaw to canvas angle) lives in `sim/minimap.ts` and is tested.
 

@@ -169,6 +169,74 @@ street_profiles:
   waterway: { width: 120, sidewalk: 0 }
   runway:   { width: 45, sidewalk: 0 }
 
+# Generated street network (issue #7). See "Streets" in README.md.
+# Avenues are the hand-drawn `routes` (arterial/highway): the generator treats them as fixed
+# constraints and never moves them. Everything below describes the streets it GENERATES between
+# them; blocks are derived as faces of the resulting planar street graph.
+# Deterministic: same seed + same spec → same streets and blocks.
+street_styles:
+  seed: 1
+  # Generated street classes, same shape as street_profiles: width = carriageway (m),
+  # sidewalk = each side (m). Alleys have no sidewalk.
+  hierarchy:
+    collector: { width: 10, sidewalk: 2.5 }
+    local:     { width: 7,  sidewalk: 2 }
+    alley:     { width: 3.5, sidewalk: 0 }
+  # One entry per land district of the active area (validator enforces it).
+  #   style: formal   → tensor-field streamlines. `field` = basis elements summed into the field:
+  #                       { kind: grid, angle: deg }      straight grid rotated by angle
+  #                       { kind: radial, at: [x, y] }    rings/spokes around a point (meters)
+  #                       { kind: coastline }             streets parallel to geometry.land
+  #                     each optionally with weight (unitless, default 1) and decay (m, falloff
+  #                     distance of that element's influence).
+  #                     `spacing` = separation between streamlines (m) per generated class.
+  #   style: informal → organic growth (Parish & Müller style). Numbers in `growth`, units inline.
+  #   reference: real sectors whose metrics the generated network must match (frozen in
+  #     street-metrics.yaml under the same name). Each sector: name + EITHER bbox
+  #     [min_lon, min_lat, max_lon, max_lat] OR place (text for the engine's /places/search) +
+  #     size_m (side of a square, m); optional note; optional import_area_id (UUID of an area
+  #     already stored in geospatial-reconstruction-engine — pinned, never re-requested).
+  #     Max 2 km² per sector unless pinned by import_area_id.
+  #     Suggested corridor sectors (San Miguelito hills, Juan Díaz, Pedregal, Tocumen town, ~1 km²
+  #     each) are pending the director's choice of boxes and are NOT listed yet.
+  #   land_use: fraction of blocks that become park / court (each in [0, 1], sum < 1).
+  #   realism: exempt (+ realism_reason, required) skips the realism test for that district.
+  districts:
+    tito-corridor:
+      style: informal
+      growth:
+        segment_length: [40, 110]   # m, [min, max] length of each grown segment
+        branch_probability: 0.35    # 0–1, chance a segment end spawns a side branch
+        snap_radius: 15             # m, a growing end within this distance snaps to a node/edge
+        min_angle: 30               # deg, branches meeting at a sharper angle are pruned
+        alley_probability: 0.15     # 0–1, chance a new branch is an alley instead of a local
+      reference:
+        - name: La Carpio
+          bbox: [-84.1560494, 9.9581759, -84.1430313, 9.9666528]
+          import_area_id: 6320bab5-c7e1-436d-a7bd-c542ee355cb7
+          note: "San José, Costa Rica — barrio informal"
+      land_use: { park: 0.06, court: 0.03 }
+    costa-del-este:
+      style: formal
+      field:
+        - { kind: grid, angle: -8, weight: 1 }
+        - { kind: coastline, weight: 1, decay: 300 }
+      spacing: { collector: 420, local: 46 }
+      reference:
+        - name: Santa Ana
+          bbox: [-79.5511906, 8.9461305, -79.5203161, 8.9723801]
+          import_area_id: df082f58-1e9c-416b-b110-beac5492e128
+          note: "Distrito de Panamá — trazado formal"
+      land_use: { park: 0.06, court: 0.03 }
+    airport:
+      style: formal
+      field:
+        - { kind: grid, angle: 0 }
+      spacing: { collector: 600, local: 250 }   # sparse: service roads between aprons
+      land_use: { park: 0.02, court: 0 }
+      realism: exempt
+      realism_reason: "Runways and apron dominate the district; no real sector of a comparable airport is frozen as a reference, so city street metrics do not apply."
+
 # Greybox building generation, per district. Seeded: same seed → same barrio every load.
 # lot = grid pitch (m); footprint/height = [min, max] m; setback = clearance from street edge (m);
 # fill = probability a lot gets a building; angle = lot-grid rotation (deg) so nothing is axis-aligned;
@@ -188,4 +256,7 @@ population:
     spawn_ring: [60, 140]   # meters from focus: spawn between min and max
     despawn_at: 180         # meters from focus
     speed: [1.1, 1.6]       # m/s, per agent
-    walk_on: [arterial, road]   # street kinds whose sidewalks pedestrians use
+    # Street CLASSES of the generated network (avenue + street_styles.hierarchy keys) whose walkways
+    # pedestrians use: sidewalks on both sides; alleys (no sidewalk) are walked on their centerline.
+    # A class not listed gets no walkway (pedestrians only cross it). Issue #7: all streets.
+    walk_on: [avenue, collector, local, alley]

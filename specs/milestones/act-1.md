@@ -22,8 +22,9 @@ director lo juega y lo aprueba.
 - [ ] Los landmarks del corredor (`tito-home`, `corridor-market`, `miguelito-hills`) aparecen
       marcados.
 - [ ] Tito es una cápsula con física que camina con WASD/flechas y no atraviesa edificios.
-- [ ] Peatones (cápsulas de otro color) caminan por las aceras de las avenidas del área activa: aparecen fuera de cámara alrededor de Tito y desaparecen lejos, con un máximo fijo definido en `world.yaml`; en cada cruce eligen una salida al azar; se detienen si Tito u otro peatón les bloquea el paso; Tito no los atraviesa.
-- [ ] Los edificios se generan con semilla desde `blockout` en `world.yaml`: misma semilla, mismo barrio.
+- [ ] Peatones (cápsulas de otro color) caminan por las aceras de las calles del área activa: aparecen fuera de cámara alrededor de Tito y desaparecen lejos, con un máximo fijo definido en `world.yaml`; en cada cruce eligen una salida al azar; se detienen si Tito u otro peatón les bloquea el paso; Tito no los atraviesa.
+- [ ] El corredor tiene una red de calles generada (colectoras, locales y callejones entre las avenidas de `routes`, según `street_styles` en `world.yaml`) y las cuadras se derivan de ella; misma semilla, mismas calles y cuadras (#7).
+- [ ] Los edificios se generan con semilla dentro de las cuadras derivadas: misma semilla, mismo barrio; las métricas de la red caen en la banda de su referencia (`specs/map/street-metrics.yaml`).
 - [ ] `npm test` pasa; la lógica pura (mundo y simulación) tiene pruebas sin navegador.
 - [ ] La cámara es cenital inclinada (~55°) y sigue a Tito con suavidad.
 - [ ] Minimapa circular en la esquina inferior izquierda, norte arriba: muestra costa, calles, edificios y landmarks del área activa con Tito al centro (flecha según su orientación); los landmarks fuera de rango quedan fijados al borde. La tecla M alterna el zoom.
