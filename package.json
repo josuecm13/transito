@@ -1,0 +1,26 @@
+{
+  "name": "transito",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "capture": "node tools/capture.mjs",
+    "test": "node --test \"tests/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "js-yaml": "^5.5.0",
+    "miniplex": "^2.0.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

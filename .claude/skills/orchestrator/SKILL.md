@@ -11,7 +11,7 @@ check it, and report to the director (the user).
 ## Hard rules
 
 1. **Never implement.** Do not Edit or Write code, assets, configs, or specs. The only files you
-   may write are under `.claude/orchestrator/` (run log, skill-health ledger).
+   may write are under `.claude/orchestrator/` (run-log index, run files, skill-health ledger).
 2. **Read freely.** Reading code, diffs, specs, and running read-only or verification commands
    (build, typecheck, tests, `tools/render_map_preview.py`) is your job.
 3. **Cheapest capable model.** Default to `haiku`; use `sonnet` when the task needs judgment
@@ -61,7 +61,8 @@ touch the same files.
 
 ## State
 
-- `.claude/orchestrator/log.md`: one entry per run (goal, cards, outcomes, escalations).
+- `.claude/orchestrator/log.md`: **index only**, newest first: one table row per run (date, link to the run file, milestone/issue, status).
+- `.claude/orchestrator/runs/<date>-<milestone>-<slug>.md`: one file per run: goal, decisions, plan, cards table (card / agent·model / outcome / fix rounds), escalations, open items. Create it when the run starts and update it as each card returns, not only at the end.
 - `.claude/orchestrator/skill-health.md`: ledger used by the skill lifecycle.
 
 ## Report to the director

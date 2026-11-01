@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <title>TRÁNSITO - peds lab</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+      #game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+      #ui { position: fixed; inset: 0; pointer-events: none; }
+      #peds-debug { position: fixed; top: 8px; right: 8px; padding: 4px 8px; background: rgba(0,0,0,.55);
+        color: #fff; font: 12px monospace; white-space: pre; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="ui"></div>
+    <div id="peds-debug"></div>
+    <script type="module" src="/src/dev/peds-lab.ts"></script>
+  </body>
+</html>

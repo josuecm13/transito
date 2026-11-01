@@ -19,7 +19,7 @@ file defines X and what calls it?") before sending a fixer.
 
 - the failing command and its exact output (trimmed to the relevant lines);
 - file and line;
-- what was already tried (from the log);
+- what was already tried (from the run file);
 - the single criterion that must pass afterwards.
 
 ## 4. Limits
@@ -30,5 +30,5 @@ file defines X and what calls it?") before sending a fixer.
 
 ## 5. Log every round
 
-In `.claude/orchestrator/log.md`: card, class, model, round, result. These entries feed the
+In the current run file (`.claude/orchestrator/runs/…`, linked from `log.md`): card, class, model, round, result. These entries feed the
 skill lifecycle.

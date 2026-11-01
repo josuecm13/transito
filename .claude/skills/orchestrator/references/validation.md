@@ -43,6 +43,6 @@ screenshot (headless browser), then look at it yourself. "It compiles" is not "i
 
 ## Outcome
 
-- All pass → log the card as done.
+- All pass → mark the card done in the current run file.
 - Any fail → `fix-loop.md` with the exact failing output.
 - Agent contradicts what you read in the repo → the repo wins. Re-check directly before reporting.
