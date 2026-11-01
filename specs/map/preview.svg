@@ -53,6 +53,7 @@
 </g>
 <polygon points="150,785 170,790 175,775 155,770" fill="#4f7d45"/>
 <polygon points="330,40 360,35 355,15 330,20" fill="#4f7d45"/>
+<rect x="400" y="400" width="200" height="400" fill="none" stroke="#d7263d" stroke-width="2" stroke-dasharray="6 4"/>
 <polyline points="0,55 10,70 25,140 15,220 40,300 30,370 10,440 30,520 15,600 0,685" fill="none" stroke="#111" stroke-width="3" stroke-dasharray="8 6"/>
 <polyline points="600,770 595,770 600,680 590,580 570,510 585,450 560,370 590,300 570,240 600,190" fill="none" stroke="#111" stroke-width="3" stroke-dasharray="8 6"/>
 <polyline points="30,10 50,150 150,300 130,440 120,520 140,650 130,800" fill="none" stroke="#2e5f80" stroke-width="14" stroke-linejoin="round"/>
@@ -63,6 +64,18 @@
 <polyline points="135,755 150,770 160,780" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
 <polyline points="515,755 515,605" fill="none" stroke="#555" stroke-width="5" stroke-linejoin="round"/>
 <polyline points="585,750 585,600" fill="none" stroke="#555" stroke-width="5" stroke-linejoin="round"/>
+<text x="175" y="95" font-size="17" font-weight="bold" fill="#222" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">Colón</text><text x="175" y="110" font-size="10" fill="#444" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">puerto, Zona Libre, casco antiguo</text>
+<text x="150" y="350" font-size="17" font-weight="bold" fill="#222" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">Lago Gatún</text><text x="150" y="365" font-size="10" fill="#444" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">islas y canal de navegación</text>
+<text x="450" y="250" font-size="17" font-weight="bold" fill="#222" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">La Cordillera</text><text x="450" y="265" font-size="10" fill="#444" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">parques nacionales, transístmica, tren</text>
+<text x="80" y="415" font-size="17" font-weight="bold" fill="#222" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">Canal central</text><text x="80" y="430" font-size="10" fill="#444" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">Gamboa, el Corte</text>
+<text x="80" y="555" font-size="17" font-weight="bold" fill="#222" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">Balboa</text><text x="80" y="570" font-size="10" fill="#444" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">esclusas, puerto, Albrook</text>
+<text x="280" y="640" font-size="17" font-weight="bold" fill="#222" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">La Ciudad</text><text x="280" y="655" font-size="10" fill="#444" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">Casco, Chorrillo, banca</text>
+<text x="445" y="645" font-size="17" font-weight="bold" fill="#222" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">Costa del Este</text><text x="445" y="660" font-size="10" fill="#444" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">torres y residenciales cerrados</text>
+<text x="505" y="420" font-size="17" font-weight="bold" fill="#222" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">El Corredor</text><text x="505" y="435" font-size="10" fill="#444" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">San Miguelito, Juan Díaz, Pedregal</text>
+<text x="550" y="755" font-size="17" font-weight="bold" fill="#222" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">Aeropuerto</text><text x="550" y="770" font-size="10" fill="#444" stroke="#fff" stroke-width="4" paint-order="stroke" text-anchor="middle">Tocumen</text>
+<text x="480" y="50" font-size="18" font-style="italic" fill="#cfe3ef" text-anchor="middle">Mar Caribe</text>
+<text x="70" y="40" font-size="18" font-style="italic" fill="#cfe3ef" text-anchor="middle">Bahía de Limón</text>
+<text x="330" y="770" font-size="18" font-style="italic" fill="#cfe3ef" text-anchor="middle">Bahía de Panamá</text>
 <circle cx="230" cy="60" r="5" fill="#d7263d" stroke="#fff"/><text x="237" y="64" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">container-port</text>
 <circle cx="260" cy="160" r="5" fill="#d7263d" stroke="#fff"/><text x="267" y="164" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">free-zone</text>
 <circle cx="160" cy="140" r="5" fill="#d7263d" stroke="#fff"/><text x="167" y="144" font-size="11" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke">neto-building</text>

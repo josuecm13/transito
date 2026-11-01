@@ -41,7 +41,7 @@ geometry:
     [3000, 7500], [2800, 7900], [2200, 7950], [1700, 7800], [1450, 7400], # Colón peninsula
     [1300, 7050], [1000, 6900], [700, 6950], [400, 7150], [150, 7400],    # Limón Bay inner shore
     [0, 7450]
-  ]
+    ]
 
   # Where the player can go on land. Irregular on purpose; follows natural barriers.
   # Water is playable out to the bounds box; that edge is hidden by haze and a current that
@@ -65,17 +65,23 @@ geometry:
   # peninsulas. The pipeline must keep these from OSM even after compression.
   shape_anchors: [canal, colon-peninsula, old-quarter-peninsula, punta-pacifica-point, causeway-islands, limon-bay]
 
+  # Names for bodies of water, placed for maps and previews.
+  water_labels:
+    - { name: Mar Caribe,      x: 4800, y: 7500 }
+    - { name: Bahía de Limón,  x: 700,  y: 7600 }
+    - { name: Bahía de Panamá, x: 3300, y: 300 }
+
 districts:
-  - { id: sea,            code: S, name: Open sea,                inspired_by: "Caribbean Sea (north), Bay of Panama (south)", playable: water, target_km2: 7 }
-  - { id: colon,          code: C, name: Colón,                   inspired_by: "Colón city, Manzanillo port, Colón Free Zone, Agua Clara locks", playable: land, compression: 4, density: high, target_km2: 5 }
-  - { id: gatun-lake,     code: L, name: Gatún Lake,              inspired_by: "Gatún Lake and its islands", playable: water, compression: 10, density: very-low, target_km2: 8 }
-  - { id: jungle-ridge,   code: J, name: Jungle ridge,            inspired_by: "Soberanía / Chagres parks, Panamá–Colón highway and railroad", playable: land, compression: 10, density: very-low, target_km2: 7 }
-  - { id: canal-central,  code: G, name: Central canal,           inspired_by: "Gamboa, Culebra Cut, Centennial Bridge", playable: land, compression: 10, density: low, target_km2: 3 }
-  - { id: pacific-locks,  code: B, name: Pacific locks and Balboa, inspired_by: "Miraflores, Pedro Miguel, Balboa port, Albrook, Bridge of the Americas, Amador", playable: land, compression: 4, density: medium, target_km2: 4 }
-  - { id: city-core,      code: K, name: City core,               inspired_by: "Casco Viejo, El Chorrillo, Calidonia, Cinta Costera, banking district, Punta Pacífica, El Cangrejo", playable: land, compression: 3, density: very-high, target_km2: 5 }
-  - { id: costa-del-este, code: E, name: Costa del Este,          inspired_by: "Costa del Este", playable: land, compression: 3, density: medium, target_km2: 2 }
-  - { id: tito-corridor,  code: T, name: The corridor,            inspired_by: "San Miguelito, Juan Díaz, Pedregal, Tocumen town", playable: land, compression: 4, density: high, target_km2: 5 }
-  - { id: airport,        code: A, name: Tocumen airport,         inspired_by: "Tocumen International Airport", playable: land, compression: 4, density: low, target_km2: 2 }
+  - { id: sea,            code: S, name: Mar abierto,                inspired_by: "Caribbean Sea (north), Bay of Panama (south)", playable: water, target_km2: 7 }
+  - { id: colon,          code: C, name: Colón,                   sub: "puerto, Zona Libre, casco antiguo", label_at: [1750, 7050], inspired_by: "Colón city, Manzanillo port, Colón Free Zone, Agua Clara locks", playable: land, compression: 4, density: high, target_km2: 5 }
+  - { id: gatun-lake,     code: L, name: Lago Gatún,              sub: "islas y canal de navegación", inspired_by: "Gatún Lake and its islands", playable: water, compression: 10, density: very-low, target_km2: 8 }
+  - { id: jungle-ridge,   code: J, name: La Cordillera,            sub: "parques nacionales, transístmica, tren", inspired_by: "Soberanía / Chagres parks, Panamá–Colón highway and railroad", playable: land, compression: 10, density: very-low, target_km2: 7 }
+  - { id: canal-central,  code: G, name: Canal central,           sub: "Gamboa, el Corte", label_at: [800, 3850], inspired_by: "Gamboa, Culebra Cut, Centennial Bridge", playable: land, compression: 10, density: low, target_km2: 3 }
+  - { id: pacific-locks,  code: B, name: Balboa, sub: "esclusas, puerto, Albrook", label_at: [800, 2450], inspired_by: "Miraflores, Pedro Miguel, Balboa port, Albrook, Bridge of the Americas, Amador", playable: land, compression: 4, density: medium, target_km2: 4 }
+  - { id: city-core,      code: K, name: La Ciudad,               sub: "Casco, Chorrillo, banca", label_at: [2800, 1600], inspired_by: "Casco Viejo, El Chorrillo, Calidonia, Cinta Costera, banking district, Punta Pacífica, El Cangrejo", playable: land, compression: 3, density: very-high, target_km2: 5 }
+  - { id: costa-del-este, code: E, name: Costa del Este,          sub: "torres y residenciales cerrados", label_at: [4450, 1550], inspired_by: "Costa del Este", playable: land, compression: 3, density: medium, target_km2: 2 }
+  - { id: tito-corridor,  code: T, name: El Corredor,            sub: "San Miguelito, Juan Díaz, Pedregal", label_at: [5050, 3800], inspired_by: "San Miguelito, Juan Díaz, Pedregal, Tocumen town", playable: land, compression: 4, density: high, target_km2: 5 }
+  - { id: airport,        code: A, name: Aeropuerto,         sub: "Tocumen", label_at: [5500, 450], inspired_by: "Tocumen International Airport", playable: land, compression: 4, density: low, target_km2: 2 }
 
 # Hero and anchor locations. `district` must match the grid cell containing (x, y).
 # Unless `on_water: true`, the point must be inside geometry.land.
@@ -114,7 +120,7 @@ landmarks:
   # Corridor / airport
   - { id: miguelito-hills,  district: tito-corridor,  x: 4500, y: 3400, kind: residential, notes: "steep informal hillside streets; Kenny's crew" }
   - { id: tito-home,        district: tito-corridor,  x: 5400, y: 2600, kind: residential, notes: "Tito's family house, under the flight path; Act 1 ends here" }
-  - { id: corridor-market,  district: tito-corridor,  x: 4600, y: 2400, kind: commercial,  notes: "Doña Mireya's shop, bus stops, delivery hub" }
+  - { id: corridor-market,  district: tito-corridor,  x: 4600, y: 2400, display_name: "Tienda de Doña Mireya", trigger_radius: 20, kind: commercial,  notes: "Doña Mireya's shop, bus stops, delivery hub" }
   - { id: passenger-terminal, district: airport,      x: 5600, y: 1700, kind: transit,     notes: "passenger terminal and drop-off" }
   - { id: cargo-terminal,   district: airport,        x: 5300, y: 1200, kind: industrial,  notes: "airside apron" }
 
@@ -146,3 +152,40 @@ routes:
     kind: runway
     width: 45
     points: [[5850, 500], [5850, 2000]]
+
+# Only the active act's area is built in detail; everything else stays grey or absent.
+active_area:
+  act: 1
+  rect: { x: [4000, 6000], y: [0, 4000] }   # corridor + airport shore (+ edge of Costa del Este)
+  spawn: tito-home                          # player start; a landmark id
+
+# Street cross-sections by route kind, meters. `width` = carriageway; `sidewalk` = each side.
+# Runways use their own `width` in routes.
+street_profiles:
+  highway:  { width: 24, sidewalk: 0 }
+  arterial: { width: 14, sidewalk: 3 }
+  road:     { width: 9,  sidewalk: 2 }
+  rail:     { width: 6,  sidewalk: 0 }
+  waterway: { width: 120, sidewalk: 0 }
+  runway:   { width: 45, sidewalk: 0 }
+
+# Greybox building generation, per district. Seeded: same seed → same barrio every load.
+# lot = grid pitch (m); footprint/height = [min, max] m; setback = clearance from street edge (m);
+# fill = probability a lot gets a building; angle = lot-grid rotation (deg) so nothing is axis-aligned;
+# landmark_clearance = no buildings within this radius (m) of any landmark.
+blockout:
+  seed: 1
+  landmark_clearance: 18
+  districts:
+    tito-corridor:  { lot: 22, footprint: [8, 16],  height: [4, 10],  setback: 4,  fill: 0.75, angle: 12 }
+    airport:        { lot: 70, footprint: [20, 45], height: [6, 14],  setback: 15, fill: 0.2,  angle: 0 }
+    costa-del-este: { lot: 40, footprint: [14, 24], height: [20, 60], setback: 8,  fill: 0.5,  angle: -8 }
+
+# Ambient population. Agents spawn out of view around the focus (the player) and despawn far away.
+population:
+  pedestrians:
+    budget: 40              # max alive at once
+    spawn_ring: [60, 140]   # meters from focus: spawn between min and max
+    despawn_at: 180         # meters from focus
+    speed: [1.1, 1.6]       # m/s, per agent
+    walk_on: [arterial, road]   # street kinds whose sidewalks pedestrians use
