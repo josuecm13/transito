@@ -5,7 +5,7 @@ import { cameraPose, damp } from '../sim/camera-rig.ts';
 
 const CAMERA = {
   pitchDeg: 55,
-  distance: 45,
+  distance: 25,
   yawDeg: 0,
   /** Seconds for the followed point to cover half the remaining gap. */
   halfLife: 0.12,

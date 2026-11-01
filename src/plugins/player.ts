@@ -67,6 +67,10 @@ export const player: GamePlugin = {
       name: 'player-move',
       phase: 'fixed',
       run(c, { dt }) {
+        if (entity.inVehicle) {
+          moveDir = null; // the vehicle plugin owns the body while Tito is inside a car
+          return;
+        }
         const running = c.input.isDown('ShiftLeft') || c.input.isDown('ShiftRight');
         const v = desiredVelocity(c.input.moveAxis(), running, PLAYER);
         moveDir = v.x !== 0 || v.z !== 0 ? { x: v.x, z: v.z } : null;

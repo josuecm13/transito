@@ -11,7 +11,8 @@ export const worldData: GamePlugin = {
     const ms = performance.now() - t0;
     ctx.services.provide(WorldDataKey, data);
     console.log(
-      `[world-data] buildings=${data.buildings.length} walkGraph nodes=${data.walkGraph.nodes.length} ` +
+      `[world-data] street edges=${data.streets.graph.edges.length} blocks=${data.streets.blocks.length} ` +
+        `buildings=${data.buildings.length} walkGraph nodes=${data.walkGraph.nodes.length} ` +
         `edges=${data.walkGraph.edges.length} generated in ${ms.toFixed(0)} ms`,
     );
   },

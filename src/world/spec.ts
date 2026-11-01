@@ -74,7 +74,75 @@ export interface PedestrianPopulation {
   spawnRing: Range;
   despawnAt: number;
   speed: Range;
-  walkOn: string[];
+  /** Street classes whose walkways pedestrians use (sidewalks; alleys on the centerline). */
+  walkOn: WalkableStreetClass[];
+}
+
+/** Every street class of the generated network: avenue (from routes) + street_styles.hierarchy. */
+export const WALKABLE_STREET_CLASSES = ['avenue', 'collector', 'local', 'alley'] as const;
+export type WalkableStreetClass = (typeof WALKABLE_STREET_CLASSES)[number];
+
+/** A generated street class (street_styles.hierarchy); same shape as a street profile. */
+export type StreetClassName = 'collector' | 'local' | 'alley';
+
+/** Tensor-field basis element for formal districts. weight is unitless, decay in meters. */
+export type FieldElement =
+  | { kind: 'grid'; angle: number; weight?: number; decay?: number }
+  | { kind: 'radial'; at: Vec2; weight?: number; decay?: number }
+  | { kind: 'coastline'; weight?: number; decay?: number };
+
+/** Organic-growth parameters for informal districts (units as commented in world.yaml). */
+export interface InformalGrowth {
+  segmentLength: Range;
+  branchProbability: number;
+  snapRadius: number;
+  minAngle: number;
+  alleyProbability: number;
+}
+
+/**
+ * A real sector whose frozen metrics (specs/map/street-metrics.yaml, same name) the generated
+ * network is compared against. Exactly one of `bbox` or `place` + `sizeM`.
+ */
+export interface ReferenceSector {
+  name: string;
+  /** [min_lon, min_lat, max_lon, max_lat] */
+  bbox?: readonly [number, number, number, number];
+  place?: string;
+  sizeM?: number;
+  note?: string;
+  importAreaId?: string;
+}
+
+interface StreetStyleCommon {
+  reference: ReferenceSector[];
+  landUse: { park: number; court: number };
+  /** Present only when the district is exempt from the realism test. */
+  realismExemptReason?: string;
+}
+
+export type StreetStyleDistrict =
+  | (StreetStyleCommon & { style: 'formal'; field: FieldElement[]; spacing: { collector: number; local: number } })
+  | (StreetStyleCommon & { style: 'informal'; growth: InformalGrowth });
+
+export interface StreetStyles {
+  seed: number;
+  hierarchy: Record<StreetClassName, StreetProfile>;
+  districts: Record<string, StreetStyleDistrict>;
+}
+
+/** Sectors larger than this (km²) must be pinned to an existing engine import. */
+export const MAX_SECTOR_KM2 = 2;
+const EARTH_R = 6371008.8;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Area (km²) of a lon/lat bbox with a local equirectangular approximation. */
+export function bboxKm2(b: readonly [number, number, number, number]): number {
+  const [minLon, minLat, maxLon, maxLat] = b;
+  const rad = Math.PI / 180;
+  const w = (maxLon - minLon) * rad * EARTH_R * Math.cos(((minLat + maxLat) / 2) * rad);
+  const h = (maxLat - minLat) * rad * EARTH_R;
+  return (w * h) / 1e6;
 }
 
 export interface WorldSpec {
@@ -94,6 +162,7 @@ export interface WorldSpec {
   activeArea: ActiveArea;
   streetProfiles: Record<string, StreetProfile>;
   blockout: Blockout;
+  streetStyles: StreetStyles;
   population: { pedestrians: PedestrianPopulation };
 }
 
@@ -371,6 +440,8 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
     }
   }
 
+  const streetStyles = parseStreetStyles(r, doc.street_styles, districts, grid, bounds, activeArea);
+
   const popRaw = r.obj(doc.population, 'population');
   const pedRaw = popRaw ? r.obj(popRaw.pedestrians, 'population.pedestrians') : undefined;
   const pp = 'population.pedestrians';
@@ -385,7 +456,13 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
     if (!Array.isArray(pedRaw.walk_on) || pedRaw.walk_on.some((k) => typeof k !== 'string')) {
       r.problems.push(`${pp}.walk_on: expected a list of strings`);
     } else {
-      pedestrians.walkOn = pedRaw.walk_on as string[];
+      const valid: readonly string[] = WALKABLE_STREET_CLASSES;
+      const unknown = (pedRaw.walk_on as string[]).filter((k) => !valid.includes(k));
+      if (unknown.length > 0) {
+        r.problems.push(`${pp}.walk_on: unknown street class(es) ${unknown.join(', ')} (valid: ${valid.join(', ')})`);
+      } else {
+        pedestrians.walkOn = pedRaw.walk_on as WalkableStreetClass[];
+      }
     }
   }
 
@@ -405,8 +482,250 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
     activeArea,
     streetProfiles,
     blockout,
+    streetStyles,
     population: { pedestrians },
   };
+}
+
+function parseSector(r: Reader, raw: unknown, path: string): ReferenceSector | undefined {
+  const o = r.obj(raw, path);
+  if (!o) return undefined;
+  const sec: ReferenceSector = { name: r.str(o, 'name', path) };
+  const p = `${path} (${sec.name})`;
+  const note = r.optStr(o, 'note', path);
+  if (note !== undefined) sec.note = note;
+  const id = r.optStr(o, 'import_area_id', path);
+  if (id !== undefined) {
+    if (!UUID_RE.test(id)) r.problems.push(`${p}.import_area_id: expected a UUID`);
+    sec.importAreaId = id;
+  }
+  const hasBbox = o.bbox !== undefined;
+  const hasPlace = o.place !== undefined || o.size_m !== undefined;
+  if (hasBbox === hasPlace) {
+    r.problems.push(`${p}: needs exactly one of bbox or place + size_m`);
+    return sec;
+  }
+  let km2: number;
+  if (hasBbox) {
+    const b = o.bbox;
+    if (!Array.isArray(b) || b.length !== 4 || !b.every(isNum)) {
+      r.problems.push(`${p}.bbox: expected [min_lon, min_lat, max_lon, max_lat]`);
+      return sec;
+    }
+    const nums = b as number[];
+    const bbox = [nums[0], nums[1], nums[2], nums[3]] as [number, number, number, number];
+    const [minLon, minLat, maxLon, maxLat] = bbox;
+    const before = r.problems.length;
+    if (!(minLon < maxLon)) r.problems.push(`${p}.bbox: min_lon must be < max_lon`);
+    if (!(minLat < maxLat)) r.problems.push(`${p}.bbox: min_lat must be < max_lat`);
+    if (![minLon, maxLon].every((v) => v >= -180 && v <= 180)) r.problems.push(`${p}.bbox: longitude out of [-180, 180]`);
+    if (![minLat, maxLat].every((v) => v >= -90 && v <= 90)) r.problems.push(`${p}.bbox: latitude out of [-90, 90]`);
+    sec.bbox = bbox;
+    if (r.problems.length > before) return sec;
+    km2 = bboxKm2(bbox);
+  } else {
+    sec.place = r.str(o, 'place', path);
+    sec.sizeM = r.num(o, 'size_m', path);
+    if (!(sec.sizeM > 0)) {
+      r.problems.push(`${p}.size_m: must be > 0`);
+      return sec;
+    }
+    km2 = (sec.sizeM * sec.sizeM) / 1e6;
+  }
+  if (km2 > MAX_SECTOR_KM2 && sec.importAreaId === undefined) {
+    r.problems.push(`${p}: area ${km2.toFixed(2)} km² exceeds ${MAX_SECTOR_KM2} km² (only sectors pinned by import_area_id may be larger)`);
+  }
+  return sec;
+}
+
+function parseFieldElement(r: Reader, raw: unknown, path: string, bounds: WorldSpec['bounds']): FieldElement | undefined {
+  const o = r.obj(raw, path);
+  if (!o) return undefined;
+  const opt: { weight?: number; decay?: number } = {};
+  for (const k of ['weight', 'decay'] as const) {
+    const v = r.optNum(o, k, path);
+    if (v === undefined) continue;
+    if (!(v > 0)) r.problems.push(`${path}.${k}: must be > 0`);
+    opt[k] = v;
+  }
+  switch (o.kind) {
+    case 'grid':
+      return { kind: 'grid', angle: r.num(o, 'angle', path), ...opt };
+    case 'radial': {
+      const at = r.point(o.at, `${path}.at`);
+      if (!(at.x >= 0 && at.x <= bounds.width && at.y >= 0 && at.y <= bounds.height)) {
+        r.problems.push(`${path}.at: outside bounds`);
+      }
+      return { kind: 'radial', at, ...opt };
+    }
+    case 'coastline':
+      return { kind: 'coastline', ...opt };
+    default:
+      r.problems.push(`${path}.kind: expected "grid", "radial" or "coastline", got ${JSON.stringify(o.kind)}`);
+      return undefined;
+  }
+}
+
+function parseStreetStyles(
+  r: Reader,
+  raw: unknown,
+  districts: District[],
+  grid: string[][],
+  bounds: WorldSpec['bounds'],
+  activeArea: ActiveArea,
+): StreetStyles {
+  const out: StreetStyles = {
+    seed: NaN,
+    hierarchy: {
+      collector: { width: NaN, sidewalk: NaN },
+      local: { width: NaN, sidewalk: NaN },
+      alley: { width: NaN, sidewalk: NaN },
+    },
+    districts: {},
+  };
+  const ss = r.obj(raw, 'street_styles');
+  if (!ss) return out;
+  out.seed = r.num(ss, 'seed', 'street_styles');
+  if (isNum(out.seed) && !Number.isInteger(out.seed)) r.problems.push('street_styles.seed: expected an integer');
+
+  const hier = r.obj(ss.hierarchy, 'street_styles.hierarchy');
+  if (hier) {
+    for (const cls of ['collector', 'local', 'alley'] as const) {
+      const path = `street_styles.hierarchy.${cls}`;
+      const o = r.obj(hier[cls], path);
+      if (!o) continue;
+      const h = { width: r.num(o, 'width', path), sidewalk: r.num(o, 'sidewalk', path) };
+      if (!(h.width > 0)) r.problems.push(`${path}.width: must be > 0`);
+      if (!(h.sidewalk >= 0)) r.problems.push(`${path}.sidewalk: must be >= 0`);
+      if (cls === 'alley' && h.sidewalk !== 0) r.problems.push(`${path}.sidewalk: must be 0`);
+      out.hierarchy[cls] = h;
+    }
+  }
+
+  const districtIds = new Set(districts.map((d) => d.id));
+  const sd = r.obj(ss.districts, 'street_styles.districts');
+  if (sd) {
+    for (const [id, rawD] of Object.entries(sd)) {
+      const path = `street_styles.districts.${id}`;
+      if (!districtIds.has(id)) r.problems.push(`${path}: unknown district "${id}"`);
+      const o = r.obj(rawD, path);
+      if (!o) continue;
+
+      const luRaw = r.obj(o.land_use, `${path}.land_use`);
+      const landUse = { park: NaN, court: NaN };
+      if (luRaw) {
+        landUse.park = r.num(luRaw, 'park', `${path}.land_use`);
+        landUse.court = r.num(luRaw, 'court', `${path}.land_use`);
+        for (const k of ['park', 'court'] as const) {
+          if (isNum(landUse[k]) && !(landUse[k] >= 0 && landUse[k] <= 1)) {
+            r.problems.push(`${path}.land_use.${k}: must be in [0, 1]`);
+          }
+        }
+        if (isNum(landUse.park) && isNum(landUse.court) && !(landUse.park + landUse.court < 1)) {
+          r.problems.push(`${path}.land_use: park + court must be < 1`);
+        }
+      }
+
+      let realismExemptReason: string | undefined;
+      if (o.realism !== undefined) {
+        if (o.realism !== 'exempt') {
+          r.problems.push(`${path}.realism: only "exempt" is allowed`);
+        } else if (typeof o.realism_reason !== 'string' || o.realism_reason.trim() === '') {
+          r.problems.push(`${path}: realism: exempt requires a non-empty realism_reason`);
+        } else {
+          realismExemptReason = o.realism_reason;
+        }
+      } else if (o.realism_reason !== undefined) {
+        r.problems.push(`${path}: realism_reason without realism: exempt`);
+      }
+
+      const reference: ReferenceSector[] = [];
+      if (o.reference !== undefined && !Array.isArray(o.reference)) {
+        r.problems.push(`${path}.reference: expected a list of sectors`);
+      } else if (Array.isArray(o.reference)) {
+        o.reference.forEach((s, i) => {
+          const sec = parseSector(r, s, `${path}.reference[${i}]`);
+          if (sec) reference.push(sec);
+        });
+      }
+      if (reference.length === 0 && o.realism !== 'exempt') {
+        r.problems.push(`${path}: needs at least one reference sector (or realism: exempt + realism_reason)`);
+      }
+
+      const common: StreetStyleCommon = { reference, landUse };
+      if (realismExemptReason !== undefined) common.realismExemptReason = realismExemptReason;
+
+      if (o.style === 'formal') {
+        const field: FieldElement[] = [];
+        if (!Array.isArray(o.field) || o.field.length === 0) {
+          r.problems.push(`${path}.field: formal style needs a non-empty list`);
+        } else {
+          o.field.forEach((el, i) => {
+            const f = parseFieldElement(r, el, `${path}.field[${i}]`, bounds);
+            if (f) field.push(f);
+          });
+        }
+        const spRaw = r.obj(o.spacing, `${path}.spacing`);
+        const spacing = { collector: NaN, local: NaN };
+        if (spRaw) {
+          for (const k of ['collector', 'local'] as const) {
+            spacing[k] = r.num(spRaw, k, `${path}.spacing`);
+            if (isNum(spacing[k]) && !(spacing[k] > 0)) r.problems.push(`${path}.spacing.${k}: must be > 0`);
+          }
+        }
+        out.districts[id] = { ...common, style: 'formal', field, spacing };
+      } else if (o.style === 'informal') {
+        const gp = `${path}.growth`;
+        const g = r.obj(o.growth, gp);
+        const growth: InformalGrowth = {
+          segmentLength: [NaN, NaN],
+          branchProbability: NaN,
+          snapRadius: NaN,
+          minAngle: NaN,
+          alleyProbability: NaN,
+        };
+        if (g) {
+          growth.segmentLength = r.pair(g.segment_length, `${gp}.segment_length`);
+          const [lo, hi] = growth.segmentLength;
+          if (isNum(lo) && isNum(hi) && !(lo > 0 && lo <= hi)) {
+            r.problems.push(`${gp}.segment_length: expected 0 < min <= max`);
+          }
+          growth.branchProbability = r.num(g, 'branch_probability', gp);
+          growth.snapRadius = r.num(g, 'snap_radius', gp);
+          growth.minAngle = r.num(g, 'min_angle', gp);
+          growth.alleyProbability = r.num(g, 'alley_probability', gp);
+          const pos = { branch_probability: growth.branchProbability, snap_radius: growth.snapRadius,
+            min_angle: growth.minAngle, alley_probability: growth.alleyProbability };
+          for (const [k, v] of Object.entries(pos)) {
+            if (isNum(v) && !(v > 0)) r.problems.push(`${gp}.${k}: must be > 0`);
+          }
+          for (const [k, v] of [['branch_probability', growth.branchProbability], ['alley_probability', growth.alleyProbability]] as const) {
+            if (isNum(v) && v > 1) r.problems.push(`${gp}.${k}: must be <= 1`);
+          }
+        }
+        out.districts[id] = { ...common, style: 'informal', growth };
+      } else {
+        r.problems.push(`${path}.style: expected "formal" or "informal", got ${JSON.stringify(o.style)}`);
+      }
+    }
+
+    // Every land district with a grid cell inside the active area needs a street style.
+    const cs = bounds.cellSize;
+    const [x0, x1] = activeArea.x;
+    const [y0, y1] = activeArea.y;
+    const missing = new Set<string>();
+    grid.forEach((row, ri) => row.forEach((code, c) => {
+      const cy0 = (grid.length - 1 - ri) * cs;
+      const cx0 = c * cs;
+      if (!(cx0 < x1 && cx0 + cs > x0 && cy0 < y1 && cy0 + cs > y0)) return;
+      const d = districts.find((dd) => dd.code === code);
+      if (d && d.playable === 'land' && !(d.id in sd)) missing.add(d.id);
+    }));
+    for (const id of [...missing].sort()) {
+      r.problems.push(`street_styles.districts: active-area land district "${id}" has no entry`);
+    }
+  }
+  return out;
 }
 
 /** District owning point p per the area-budget grid (north row first), or undefined outside. */

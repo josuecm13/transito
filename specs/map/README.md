@@ -86,6 +86,45 @@ The canal's **Atlantic end lies west of its Pacific end** — true in reality, a
 (Atlantic locks at x ≈ 500, Pacific locks at x ≈ 1400). Players who navigate by "Atlantic = east"
 get it wrong.
 
+## Streets
+
+Street network model (issue #7). Data lives in `world.yaml` → `street_styles`; frozen reference
+metrics live in `street-metrics.yaml`.
+
+- **Avenues are hand-drawn.** `routes` of kind `arterial` / `highway` are fixed constraints: the
+  generator never moves them; generated streets join them in T or X junctions.
+- **Collectors, locals and alleys are generated** between the avenues, with widths from
+  `street_styles.hierarchy` (same `{ width, sidewalk }` shape as `street_profiles`; alleys have no
+  sidewalk). Each active-area land district picks a style:
+  - `formal` — streamlines of a tensor field summed from basis elements (`grid` with an angle,
+    `radial` around a point, `coastline` parallel to `geometry.land`), spaced per class by
+    `spacing`.
+  - `informal` — organic growth (segments grow, branch, snap to nearby nodes/edges, prune acute
+    angles, spawn alleys), tuned by `growth`.
+- **Blocks are derived**, never drawn: they are the faces of the planar street graph (after snap,
+  merge, split at crossings, prune). Buildable area = block minus (half the street width +
+  sidewalk) on each bordering street. Buildable area is split into parcels; each parcel fronts a
+  street and gets a building.
+- **Land use:** `land_use.park` / `land_use.court` are the fractions of a district's blocks that
+  become parks / courts (green, no buildings). Each in [0, 1], sum < 1.
+- **Deterministic:** same `street_styles.seed` + same spec → identical streets, blocks, parcels.
+- **Realism is tested, not eyeballed.** Each district lists `reference` sectors: real places, as a
+  lon/lat `bbox` or a `place` + `size_m` square, at most 2 km² unless pinned to an existing engine
+  import by `import_area_id`. Their metrics (block size quantiles, dead-end / T / X node shares,
+  intersections and street km per km², mean segment) are frozen in `street-metrics.yaml` with
+  provenance (`import_area_id`, `bbox`, `place_name`, `km2`, extraction date, source, method,
+  "© OpenStreetMap contributors"). The generated network must fall inside the `band` around its
+  reference. A district may opt out only with `realism: exempt` plus a written `realism_reason`.
+- **Real streets are never imported at runtime.** Reference sectors are measured offline from the
+  `geospatial-reconstruction-engine` database (OSM); the game only reads the frozen numbers.
+- **Refreshing the references:** `npm run references` (`tools/reference-sectors.mjs`) reads every
+  `reference` sector, reuses the engine import whose id (`import_area_id`) or exact bbox already
+  exists (no re-import), otherwise requests it (`POST /import-areas`, background, following its
+  events), measures `map-data?mode=filter` with `src/world/street-metrics.ts` and rewrites only
+  `references:` in `street-metrics.yaml` (`method: map-data`). Needs the engine running at
+  `ENGINE_URL` (default `http://localhost:58000`); a second run with no spec change leaves the file
+  byte-identical.
+
 ## Naming
 
 Until open question #3 is decided, places use working names; the real place that inspired each one

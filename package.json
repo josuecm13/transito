@@ -8,12 +8,14 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "capture": "node tools/capture.mjs",
+    "references": "node tools/reference-sectors.mjs",
     "test": "node --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
     "js-yaml": "^5.5.0",
     "miniplex": "^2.0.0",
+    "polygon-clipping": "^0.15.7",
     "three": "^0.187.0"
   },
   "devDependencies": {

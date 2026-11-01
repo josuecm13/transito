@@ -20,6 +20,9 @@ export interface View {
 export async function createView(canvas: HTMLCanvasElement): Promise<View> {
   const renderer = new WebGPURenderer({ canvas, antialias: true });
   await renderer.init();
+  // Stats cover exactly one view.render() (the renderer's own rAF would otherwise zero them before
+  // the debug HUD reads them).
+  renderer.info.autoReset = false;
   const backend = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend
     ? 'WebGPU'
     : 'WebGL2';
@@ -50,7 +53,10 @@ export async function createView(canvas: HTMLCanvasElement): Promise<View> {
     scene,
     camera,
     backend,
-    render: () => renderer.render(scene, camera),
+    render: () => {
+      renderer.info.reset();
+      renderer.render(scene, camera);
+    },
     dispose() {
       window.removeEventListener('resize', resize);
       renderer.dispose();

@@ -26,6 +26,8 @@ CARD-10 (pausa en motor + screens + menú + criterios en spec) → CARD-11 (pant
 - Director aprobó Opus para el resto de la feature (mapa): "needs better output".
 
 ## Open
+- #7 actualizado a pedido del director: sectores de referencia pequeños (~0,5–2 km²) declarados en el spec y pedidos al motor geoespacial (quedan guardados en su DB, reutilizados si existen); nueva tarjeta S2b `tools/reference-sectors.mjs`; métrica única en TS validada contra SQL. Rutas del motor verificadas en su código.
+- Cámara a 25 m (fixer haiku, sin tests a pedido del director), sin commit en main. Servidores, contenedor db y colima detenidos.
 - Mapa: HUD de debug queda encima de las pantallas; labels de landmarks salen como ids en inglés (falta display_name en español en el spec, decisión del director).
 - Entrada: una pulsación más corta que un frame se pierde (moveAxis muestrea estado). Considerar cola de eventos si molesta.
 - Escala: modelo correcto; Tito se ve ~18 px por cámara a 45 m (pitch 55°, fov 50). Opciones de distancia enviadas al director (25 m ≈ 32 px recomendado). Velocidad caminar 4,2 m/s es trote (decisión de sensación).

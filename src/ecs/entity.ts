@@ -10,6 +10,10 @@ export interface Entity {
   velocity?: { x: number; y: number; z: number };
   /** The controlled character. */
   player?: true;
+  /** A drivable car (vehicle plugin). */
+  vehicle?: true;
+  /** Set on the player while inside a car: on-foot movement is off. */
+  inVehicle?: true;
   /** Ambient population spawns around this entity. */
   populationFocus?: true;
   /** The camera follows this entity. */

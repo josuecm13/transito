@@ -21,6 +21,10 @@ function panel(root: HTMLElement, title: string): HTMLDivElement {
 const CONTROLS: ReadonlyArray<readonly [string, string]> = [
   ['Moverse', 'WASD / flechas'],
   ['Correr', 'Shift'],
+  ['Subir / bajar del carro', 'E'],
+  ['Acelerar / frenar y reversa', 'W / S'],
+  ['Girar el carro', 'A / D'],
+  ['Freno de mano', 'Espacio'],
   ['Zoom del minimapa', 'M'],
   ['Mapa', 'Tab'],
   ['Pausa', 'Esc'],

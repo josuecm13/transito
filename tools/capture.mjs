@@ -12,7 +12,8 @@ for (let i = 0; i < argv.length; i++) {
   if (argv[i].startsWith('--')) args[argv[i].slice(2)] = argv[++i];
 }
 if (!args.out) {
-  console.error('usage: capture.mjs --out <png> [--url u] [--wait ms] [--size WxH] [--keys "KeyW:1500,..."] [--eval "js"]');
+  console.error('usage: capture.mjs --out <png> [--url u] [--wait ms] [--size WxH] [--keys "KeyW:1500,..."] [--eval "js"] [--gpu angle-backend]');
+  console.error('  --gpu metal|gl|default  render on the real GPU through ANGLE (default: SwiftShader, CPU)');
   process.exit(2);
 }
 const url = args.url ?? 'http://localhost:5173/';
@@ -74,8 +75,7 @@ async function main() {
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${profile}`,
     `--window-size=${W},${H}`,
-    '--use-angle=swiftshader',
-    '--enable-unsafe-swiftshader',
+    ...(args.gpu ? [`--use-angle=${args.gpu}`, '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']),
     '--no-first-run',
     '--no-default-browser-check',
     'about:blank',
