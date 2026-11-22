@@ -11,3 +11,4 @@ Updated by the orchestrator at the end of each run. See
 | agent: verifier | 1 | 1 | 0 | 2026-10-31 | recaptura de h0.png; la validación de código la hace el orquestador directamente |
 | agent: scout | 0 | 0 | 0 | — | |
 | agent: general-purpose | 1 | 1 | 0 | 2026-11-01 | S0: levantar motor geoespacial (infra fuera del repo) |
+| skill: map-from-reality | 0 | 0 | 0 | — | creada 2026-11-21 a pedido del director (flujo de fragmentos reales + CLI `npm run geo`); sin usos todavía |
