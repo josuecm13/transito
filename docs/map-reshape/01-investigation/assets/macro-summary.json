@@ -1,0 +1,1631 @@
+{
+ "generated_by": "tools/probe-macro-relief.mjs",
+ "attribution": [
+  "AWS Terrain Tiles (Mapzen terrarium; SRTM, etc.)",
+  "© OpenStreetMap contributors"
+ ],
+ "mapping": {
+  "corridor_fit": {
+   "scale_map_per_real": 0.16,
+   "centroid_real_east_north_m": [
+    6413,
+    763
+   ],
+   "centroid_map_xy": [
+    5025,
+    2525
+   ],
+   "east_north_from": "e=(lon+79.5)*111.0*cos(9.05deg)*1000, n=(lat-9.05)*111.0*1000",
+   "ratio": "1:6.3",
+   "rotation_deg_ccw": -63,
+   "residuals": [
+    {
+     "id": "miguelito-hills~Samaria",
+     "residual_m": 105
+    },
+    {
+     "id": "corridor-market~Juan Diaz",
+     "residual_m": 224
+    },
+    {
+     "id": "tito-home~Pedregal",
+     "residual_m": 171
+    },
+    {
+     "id": "passenger-terminal~Tocumen terminal",
+     "residual_m": 118
+    }
+   ]
+  },
+  "isthmus_anchors": [
+   {
+    "id": "Colon",
+    "lon": -79.9,
+    "lat": 9.359,
+    "x": 1750,
+    "y": 7050
+   },
+   {
+    "id": "Gatun locks",
+    "lon": -79.918,
+    "lat": 9.27,
+    "x": 500,
+    "y": 6500
+   },
+   {
+    "id": "Gamboa",
+    "lon": -79.7,
+    "lat": 9.12,
+    "x": 1300,
+    "y": 3600
+   },
+   {
+    "id": "Miraflores",
+    "lon": -79.595,
+    "lat": 8.996,
+    "x": 1400,
+    "y": 1500
+   },
+   {
+    "id": "Casco Viejo",
+    "lon": -79.535,
+    "lat": 8.953,
+    "x": 2400,
+    "y": 400
+   },
+   {
+    "id": "Tocumen terminal",
+    "lon": -79.386,
+    "lat": 9.071,
+    "x": 5600,
+    "y": 1700
+   }
+  ]
+ },
+ "A": {
+  "cell_m": 150.9,
+  "grid": [
+   511,
+   369
+  ],
+  "land_km2": 3921,
+  "height_land_q": {
+   "0.05": 10.039,
+   "0.1": 26,
+   "0.25": 42,
+   "0.5": 97,
+   "0.75": 187,
+   "0.9": 402,
+   "0.95": 521,
+   "0.99": 730
+  },
+  "slope_land_pct_q": {
+   "0.05": 0,
+   "0.1": 0.741,
+   "0.25": 2.65,
+   "0.5": 6.398,
+   "0.75": 13.807,
+   "0.9": 22.839,
+   "0.95": 28.533,
+   "0.99": 39.635
+  },
+  "share_land_below": {
+   "10m": 0.046,
+   "30m": 0.177
+  },
+  "flat_lt10m_km2": 181,
+  "flat_lt10m_slope_lt2pct_km2": 136,
+  "height_max_m": 1101,
+  "stream_threshold_km2": 25,
+  "stream_km": 428,
+  "ridge_km": 138,
+  "divide_km": 152,
+  "divide_height_q": {
+   "0.1": 64,
+   "0.5": 176,
+   "0.9": 463
+  },
+  "peaks": [
+   {
+    "lon": -79.8095,
+    "lat": 9.2411,
+    "h": 1101
+   },
+   {
+    "lon": -79.3838,
+    "lat": 9.2302,
+    "h": 994
+   },
+   {
+    "lon": -79.4195,
+    "lat": 9.3319,
+    "h": 776
+   },
+   {
+    "lon": -79.8026,
+    "lat": 9.1611,
+    "h": 508
+   },
+   {
+    "lon": -79.9262,
+    "lat": 9.2478,
+    "h": 499
+   },
+   {
+    "lon": -79.6365,
+    "lat": 9.3413,
+    "h": 466
+   },
+   {
+    "lon": -79.5527,
+    "lat": 9.0879,
+    "h": 426
+   },
+   {
+    "lon": -79.7285,
+    "lat": 9.0824,
+    "h": 356
+   },
+   {
+    "lon": -79.7175,
+    "lat": 9.2302,
+    "h": 330
+   },
+   {
+    "lon": -79.8631,
+    "lat": 9.2072,
+    "h": 318
+   },
+   {
+    "lon": -79.6461,
+    "lat": 9.1475,
+    "h": 299
+   },
+   {
+    "lon": -79.6653,
+    "lat": 9.039,
+    "h": 294
+   }
+  ],
+  "basins": [
+   {
+    "mouth": 23058,
+    "lon": -79.9139,
+    "lat": 9.3386,
+    "area_km2": 2237.7,
+    "frame": false
+   },
+   {
+    "mouth": 174573,
+    "lon": -79.5582,
+    "lat": 8.9373,
+    "area_km2": 243.5,
+    "frame": false
+   },
+   {
+    "mouth": 132859,
+    "lon": -79.3,
+    "lat": 9.0485,
+    "area_km2": 204.1,
+    "frame": true
+   },
+   {
+    "mouth": 146542,
+    "lon": -79.4566,
+    "lat": 9.0119,
+    "area_km2": 149.5,
+    "frame": false
+   },
+   {
+    "mouth": 188259,
+    "lon": -79.7106,
+    "lat": 8.9007,
+    "area_km2": 135.2,
+    "frame": true
+   },
+   {
+    "mouth": 130305,
+    "lon": -80.0004,
+    "lat": 9.054,
+    "area_km2": 100.7,
+    "frame": true
+   }
+  ],
+  "coast_transects": [
+   {
+    "lon": -79.95,
+    "coast_lat": 8.9007,
+    "to10m_m": 0,
+    "to30m_m": 0,
+    "to100m_m": 0
+   },
+   {
+    "lon": -79.9,
+    "coast_lat": 8.9007,
+    "to10m_m": 0,
+    "to30m_m": 0,
+    "to100m_m": 0
+   },
+   {
+    "lon": -79.85,
+    "coast_lat": 8.9007,
+    "to10m_m": 0,
+    "to30m_m": 0,
+    "to100m_m": 0
+   },
+   {
+    "lon": -79.8,
+    "coast_lat": 8.9007,
+    "to10m_m": 0,
+    "to30m_m": 0,
+    "to100m_m": 1660
+   },
+   {
+    "lon": -79.75,
+    "coast_lat": 8.9007,
+    "to10m_m": 0,
+    "to30m_m": 0,
+    "to100m_m": 4226
+   },
+   {
+    "lon": -79.7,
+    "coast_lat": 8.9007,
+    "to10m_m": 0,
+    "to30m_m": 2717,
+    "to100m_m": 7396
+   },
+   {
+    "lon": -79.65,
+    "coast_lat": 8.9007,
+    "to10m_m": 0,
+    "to30m_m": 0,
+    "to100m_m": 0
+   },
+   {
+    "lon": -79.6,
+    "coast_lat": 8.9007,
+    "to10m_m": 1962,
+    "to30m_m": 3622,
+    "to100m_m": 17357
+   },
+   {
+    "lon": -79.55,
+    "coast_lat": 8.9346,
+    "to10m_m": 302,
+    "to30m_m": 1811,
+    "to100m_m": 2264
+   },
+   {
+    "lon": -79.5,
+    "coast_lat": 8.9834,
+    "to10m_m": 604,
+    "to30m_m": 4679,
+    "to100m_m": 8603
+   },
+   {
+    "lon": -79.45,
+    "coast_lat": 9.0119,
+    "to10m_m": 0,
+    "to30m_m": 5433,
+    "to100m_m": 11169
+   },
+   {
+    "lon": -79.4,
+    "coast_lat": 9.0065,
+    "to10m_m": 2113,
+    "to30m_m": 9056,
+    "to100m_m": 12376
+   },
+   {
+    "lon": -79.35,
+    "coast_lat": 9.0228,
+    "to10m_m": 6641,
+    "to30m_m": 8150,
+    "to100m_m": 12829
+   }
+  ],
+  "bbox": [
+   -80,
+   8.9,
+   -79.3,
+   9.4
+  ],
+  "zoom": 10,
+  "river_vs_D8": [
+   {
+    "name": "Río Chagres",
+    "osm_km_in_bbox": 64.3,
+    "pts": 427,
+    "share_within_300m_of_D8": 0.81
+   },
+   {
+    "name": "Río Gatún",
+    "osm_km_in_bbox": 41.5,
+    "pts": 591,
+    "share_within_300m_of_D8": 0.7
+   },
+   {
+    "name": "Río Cabra",
+    "osm_km_in_bbox": 35.2,
+    "pts": 671,
+    "share_within_300m_of_D8": 0.44
+   },
+   {
+    "name": "Quebrada",
+    "osm_km_in_bbox": 27.9,
+    "pts": 1163,
+    "share_within_300m_of_D8": 0.07
+   },
+   {
+    "name": "Río Boquerón",
+    "osm_km_in_bbox": 27.9,
+    "pts": 242,
+    "share_within_300m_of_D8": 0.26
+   },
+   {
+    "name": "Río Juan Díaz",
+    "osm_km_in_bbox": 26,
+    "pts": 498,
+    "share_within_300m_of_D8": 0.75
+   },
+   {
+    "name": "Río Chilibre",
+    "osm_km_in_bbox": 22.4,
+    "pts": 533,
+    "share_within_300m_of_D8": 0.44
+   },
+   {
+    "name": "Río Tocumen",
+    "osm_km_in_bbox": 20.9,
+    "pts": 399,
+    "share_within_300m_of_D8": 0.08
+   },
+   {
+    "name": "Río Tapia",
+    "osm_km_in_bbox": 18.7,
+    "pts": 687,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Las Cascadas",
+    "osm_km_in_bbox": 17.3,
+    "pts": 389,
+    "share_within_300m_of_D8": 0.29
+   },
+   {
+    "name": "Río Las Lajas",
+    "osm_km_in_bbox": 16.9,
+    "pts": 477,
+    "share_within_300m_of_D8": 0.53
+   },
+   {
+    "name": "Río Tataré",
+    "osm_km_in_bbox": 15.9,
+    "pts": 235,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Caimito",
+    "osm_km_in_bbox": 15.9,
+    "pts": 344,
+    "share_within_300m_of_D8": 0.13
+   },
+   {
+    "name": "Río Indio",
+    "osm_km_in_bbox": 14.6,
+    "pts": 257,
+    "share_within_300m_of_D8": 0.95
+   },
+   {
+    "name": "Río Cabuya",
+    "osm_km_in_bbox": 14,
+    "pts": 362,
+    "share_within_300m_of_D8": 0.06
+   },
+   {
+    "name": "Río Abajo",
+    "osm_km_in_bbox": 13.1,
+    "pts": 410,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Curundú",
+    "osm_km_in_bbox": 10.2,
+    "pts": 212,
+    "share_within_300m_of_D8": 0.01
+   },
+   {
+    "name": "Río Utivé",
+    "osm_km_in_bbox": 9.9,
+    "pts": 118,
+    "share_within_300m_of_D8": 0.43
+   },
+   {
+    "name": "Río Matías Hernández",
+    "osm_km_in_bbox": 9.2,
+    "pts": 253,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Bique",
+    "osm_km_in_bbox": 8.2,
+    "pts": 222,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Aguacate",
+    "osm_km_in_bbox": 8.1,
+    "pts": 149,
+    "share_within_300m_of_D8": 0.8
+   },
+   {
+    "name": "Río Viejo",
+    "osm_km_in_bbox": 8,
+    "pts": 90,
+    "share_within_300m_of_D8": 0.1
+   },
+   {
+    "name": "Quebrada La Cabima",
+    "osm_km_in_bbox": 7.6,
+    "pts": 291,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Matasnillo",
+    "osm_km_in_bbox": 7.3,
+    "pts": 320,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Cardenas",
+    "osm_km_in_bbox": 7.1,
+    "pts": 131,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río San Bernadino",
+    "osm_km_in_bbox": 7,
+    "pts": 110,
+    "share_within_300m_of_D8": 0.55
+   },
+   {
+    "name": "Quebrada Las Mañanitas",
+    "osm_km_in_bbox": 6.2,
+    "pts": 218,
+    "share_within_300m_of_D8": 0.05
+   },
+   {
+    "name": "Quebrada Santa Rita",
+    "osm_km_in_bbox": 6,
+    "pts": 291,
+    "share_within_300m_of_D8": 0.05
+   },
+   {
+    "name": "Quebrada San Pablo",
+    "osm_km_in_bbox": 5.5,
+    "pts": 198,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Quebrada Palomo",
+    "osm_km_in_bbox": 5.4,
+    "pts": 202,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Coco Solo",
+    "osm_km_in_bbox": 5.2,
+    "pts": 93,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Caimitillo",
+    "osm_km_in_bbox": 5,
+    "pts": 113,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Quebrada La Gallinaza",
+    "osm_km_in_bbox": 4.6,
+    "pts": 55,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Arenal",
+    "osm_km_in_bbox": 4.6,
+    "pts": 69,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Venado",
+    "osm_km_in_bbox": 4.4,
+    "pts": 87,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Río Caraño",
+    "osm_km_in_bbox": 4,
+    "pts": 70,
+    "share_within_300m_of_D8": 0.11
+   },
+   {
+    "name": "Río Naranjal",
+    "osm_km_in_bbox": 4,
+    "pts": 115,
+    "share_within_300m_of_D8": 0.13
+   },
+   {
+    "name": "Río Tagarete",
+    "osm_km_in_bbox": 4,
+    "pts": 118,
+    "share_within_300m_of_D8": 0.08
+   },
+   {
+    "name": "Río Congo",
+    "osm_km_in_bbox": 3.8,
+    "pts": 47,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Rio Mandingo",
+    "osm_km_in_bbox": 3.6,
+    "pts": 129,
+    "share_within_300m_of_D8": 0.88
+   }
+  ],
+  "canals": [
+   "Canal de Panamá",
+   "Antiguo Canal Francés",
+   "Banana Cut"
+  ],
+  "osm_peaks": [
+   {
+    "name": "Cerro Jefe",
+    "lon": -79.3833,
+    "lat": 9.2299,
+    "ele": "1007"
+   },
+   {
+    "name": "Cerro Cabra",
+    "lon": -79.6388,
+    "lat": 8.9102,
+    "ele": "504"
+   },
+   {
+    "name": "Cerro Cedro",
+    "lon": -79.5491,
+    "lat": 8.9955,
+    "ele": "155"
+   },
+   {
+    "name": "San Juan Hill",
+    "lon": -79.5826,
+    "lat": 8.9547,
+    "ele": "118"
+   },
+   {
+    "name": "Cerro Sosa",
+    "lon": -79.5609,
+    "lat": 8.9546,
+    "ele": "83"
+   },
+   {
+    "name": "Cerro Ancón",
+    "lon": -79.5492,
+    "lat": 8.9576
+   },
+   {
+    "name": "Cerro Gordo",
+    "lon": -79.6647,
+    "lat": 9.0385
+   },
+   {
+    "name": "Luisa",
+    "lon": -79.6143,
+    "lat": 9.025
+   },
+   {
+    "name": "Cerro Pelado",
+    "lon": -79.7047,
+    "lat": 9.1261
+   },
+   {
+    "name": "Gunn Hill",
+    "lon": -79.5848,
+    "lat": 9.0125
+   },
+   {
+    "name": "Cerro del Oro",
+    "lon": -79.6431,
+    "lat": 9.0422
+   },
+   {
+    "name": "Cerro Balboa",
+    "lon": -79.7171,
+    "lat": 9.0875
+   },
+   {
+    "name": "(unnamed)",
+    "lon": -79.5328,
+    "lat": 9.0606
+   },
+   {
+    "name": "La Montaña del Dulce Canto",
+    "lon": -79.5183,
+    "lat": 9.0595
+   }
+  ],
+  "highways": [
+   "Corredor Norte [motorway]",
+   "Avenida Omar Torrijos Herrera [trunk]",
+   "Corredor Sur [motorway]",
+   "Carretera Panamericana [trunk]",
+   "Autopista Panamá–Colón [motorway]",
+   "Avenida Balboa [trunk]",
+   "Avenida de los Mártires [trunk]",
+   "Avenida Balboa [motorway]",
+   "Avenida Balboa Viaducto [trunk]",
+   "Cinta Costera [trunk]",
+   "Cinta Costera [motorway]",
+   "Puente de las Américas [trunk]",
+   "Vía Centenario [motorway]",
+   "Vía Centenario [trunk]",
+   "Avenida La Paz [trunk]",
+   "Autopista Arraiján - La Chorrera [motorway]",
+   "Avenida Gaillard [trunk]",
+   "Corredor Norte [trunk]",
+   "Carretera Panamericana [motorway]",
+   "Carretera Presidente Roberto Francisco Chiari Remón [motorway]",
+   "Bulevar de las Américas [motorway]"
+  ],
+  "fragment_check": [
+   {
+    "fragment": "juan-diaz",
+    "engine_p50": 7.4,
+    "probe_p50": 8,
+    "engine_min": 3,
+    "probe_min": 6,
+    "engine_max": 13,
+    "probe_max": 11
+   },
+   {
+    "fragment": "las-mananitas",
+    "engine_p50": 55,
+    "probe_p50": 55,
+    "engine_min": 30.4,
+    "probe_min": 32,
+    "engine_max": 71.2,
+    "probe_max": 64
+   },
+   {
+    "fragment": "pedregal",
+    "engine_p50": 36.1,
+    "probe_p50": 38,
+    "engine_min": 24.6,
+    "probe_min": 29,
+    "engine_max": 52,
+    "probe_max": 49
+   },
+   {
+    "fragment": "samaria",
+    "engine_p50": 58.5,
+    "probe_p50": 63,
+    "engine_min": 31.8,
+    "probe_min": 47,
+    "engine_max": 90.3,
+    "probe_max": 77
+   },
+   {
+    "fragment": "tocumen",
+    "engine_p50": 36.5,
+    "probe_p50": 37,
+    "engine_min": 26.9,
+    "probe_min": 29,
+    "engine_max": 48.1,
+    "probe_max": 50
+   },
+   {
+    "fragment": "torrijos-carter",
+    "engine_p50": 71.9,
+    "probe_p50": 72,
+    "engine_min": 59,
+    "probe_min": 59,
+    "engine_max": 148.4,
+    "probe_max": 126
+   }
+  ]
+ },
+ "B": {
+  "cell_m": 18.9,
+  "grid": [
+   1341,
+   1004
+  ],
+  "land_km2": 412,
+  "height_land_q": {
+   "0.05": 3,
+   "0.1": 5,
+   "0.25": 17,
+   "0.5": 58,
+   "0.75": 122,
+   "0.9": 198,
+   "0.95": 269,
+   "0.99": 380
+  },
+  "slope_land_pct_q": {
+   "0.05": 0.597,
+   "0.1": 2.65,
+   "0.25": 5.299,
+   "0.5": 8.379,
+   "0.75": 16.966,
+   "0.9": 26.496,
+   "0.95": 32.343,
+   "0.99": 45.74
+  },
+  "share_land_below": {
+   "10m": 0.168,
+   "30m": 0.337
+  },
+  "flat_lt10m_km2": 69,
+  "flat_lt10m_slope_lt2pct_km2": 13,
+  "height_max_m": 505,
+  "stream_threshold_km2": 1.5,
+  "stream_km": 210,
+  "ridge_km": 23,
+  "divide_km": 114,
+  "divide_height_q": {
+   "0.1": 8,
+   "0.5": 65,
+   "0.9": 179
+  },
+  "peaks": [
+   {
+    "lon": -79.4441,
+    "lat": 9.1349,
+    "h": 453,
+    "map_xy": [
+     6236,
+     3197
+    ]
+   },
+   {
+    "lon": -79.5327,
+    "lat": 9.0605,
+    "h": 264,
+    "map_xy": [
+     4354,
+     3976
+    ]
+   },
+   {
+    "lon": -79.5198,
+    "lat": 9.0493,
+    "h": 236,
+    "map_xy": [
+     4280,
+     3684
+    ]
+   },
+   {
+    "lon": -79.4992,
+    "lat": 9.1156,
+    "h": 201,
+    "map_xy": [
+     5491,
+     3899
+    ]
+   },
+   {
+    "lon": -79.5366,
+    "lat": 9.1218,
+    "h": 196,
+    "map_xy": [
+     5290,
+     4532
+    ]
+   },
+   {
+    "lon": -79.5274,
+    "lat": 9.1073,
+    "h": 188,
+    "map_xy": [
+     5135,
+     4272
+    ]
+   },
+   {
+    "lon": -79.515,
+    "lat": 9.1142,
+    "h": 183,
+    "map_xy": [
+     5343,
+     4134
+    ]
+   },
+   {
+    "lon": -79.5334,
+    "lat": 9.1361,
+    "h": 181,
+    "map_xy": [
+     5541,
+     4598
+    ]
+   },
+   {
+    "lon": -79.502,
+    "lat": 9.0623,
+    "h": 167,
+    "map_xy": [
+     4627,
+     3512
+    ]
+   },
+   {
+    "lon": -79.5397,
+    "lat": 9.0401,
+    "h": 165,
+    "map_xy": [
+     3976,
+     3920
+    ]
+   },
+   {
+    "lon": -79.4664,
+    "lat": 9.0781,
+    "h": 155,
+    "map_xy": [
+     5161,
+     3085
+    ]
+   },
+   {
+    "lon": -79.4884,
+    "lat": 9.0759,
+    "h": 148,
+    "map_xy": [
+     4951,
+     3410
+    ]
+   }
+  ],
+  "basins": [
+   {
+    "mouth": 981474,
+    "lon": -79.3535,
+    "lat": 9.0261,
+    "area_km2": 192.1,
+    "frame": false,
+    "map_xy": [
+     5242,
+     905
+    ]
+   },
+   {
+    "mouth": 718775,
+    "lon": -79.33,
+    "lat": 9.0593,
+    "area_km2": 30.1,
+    "frame": true,
+    "map_xy": [
+     5954,
+     807
+    ]
+   },
+   {
+    "mouth": 1195223,
+    "lon": -79.4927,
+    "lat": 8.9989,
+    "area_km2": 23.9,
+    "frame": false,
+    "map_xy": [
+     3701,
+     2854
+    ]
+   },
+   {
+    "mouth": 1176497,
+    "lon": -79.4845,
+    "lat": 9.0013,
+    "area_km2": 22.8,
+    "frame": false,
+    "map_xy": [
+     3804,
+     2746
+    ]
+   },
+   {
+    "mouth": 1094866,
+    "lon": -79.4553,
+    "lat": 9.0117,
+    "area_km2": 20.8,
+    "frame": false,
+    "map_xy": [
+     4202,
+     2375
+    ]
+   },
+   {
+    "mouth": 801917,
+    "lon": -79.33,
+    "lat": 9.0488,
+    "area_km2": 13.1,
+    "frame": true,
+    "map_xy": [
+     5788,
+     722
+    ]
+   },
+   {
+    "mouth": 308429,
+    "lon": -79.33,
+    "lat": 9.1112,
+    "area_km2": 12.5,
+    "frame": true,
+    "map_xy": [
+     6773,
+     1227
+    ]
+   },
+   {
+    "mouth": 19,
+    "lon": -79.5567,
+    "lat": 9.15,
+    "area_km2": 11.6,
+    "frame": true,
+    "map_xy": [
+     5575,
+     5074
+    ]
+   },
+   {
+    "mouth": 1345326,
+    "lon": -79.508,
+    "lat": 8.98,
+    "area_km2": 9.9,
+    "frame": true,
+    "map_xy": [
+     3281,
+     2940
+    ]
+   },
+   {
+    "mouth": 1345154,
+    "lon": -79.5375,
+    "lat": 8.98,
+    "area_km2": 8.4,
+    "frame": true,
+    "map_xy": [
+     3045,
+     3400
+    ]
+   }
+  ],
+  "coast_transects": [
+   {
+    "lon": -79.54,
+    "coast_lat": 8.98,
+    "to10m_m": 0,
+    "to30m_m": 472,
+    "to100m_m": 5378
+   },
+   {
+    "lon": -79.52,
+    "coast_lat": 8.98,
+    "to10m_m": 0,
+    "to30m_m": 0,
+    "to100m_m": 7360
+   },
+   {
+    "lon": -79.5,
+    "coast_lat": 8.9827,
+    "to10m_m": 434,
+    "to30m_m": 4812,
+    "to100m_m": 8643
+   },
+   {
+    "lon": -79.48,
+    "coast_lat": 9.0001,
+    "to10m_m": 906,
+    "to30m_m": 4510,
+    "to100m_m": 5944
+   },
+   {
+    "lon": -79.46,
+    "coast_lat": 9.01,
+    "to10m_m": 302,
+    "to30m_m": 5076,
+    "to100m_m": 11662
+   },
+   {
+    "lon": -79.44,
+    "coast_lat": 9.0132,
+    "to10m_m": 623,
+    "to30m_m": 6812,
+    "to100m_m": 10454
+   },
+   {
+    "lon": -79.42,
+    "coast_lat": 9.0152,
+    "to10m_m": 3340,
+    "to30m_m": 5133,
+    "to100m_m": 10266
+   },
+   {
+    "lon": -79.4,
+    "coast_lat": 9.0056,
+    "to10m_m": 2189,
+    "to30m_m": 9001,
+    "to100m_m": 11851
+   },
+   {
+    "lon": -79.38,
+    "coast_lat": 9.0195,
+    "to10m_m": 264,
+    "to30m_m": 7303,
+    "to100m_m": 10737
+   },
+   {
+    "lon": -79.36,
+    "coast_lat": 9.0218,
+    "to10m_m": 226,
+    "to30m_m": 7850,
+    "to100m_m": 11681
+   },
+   {
+    "lon": -79.34,
+    "coast_lat": 9.0234,
+    "to10m_m": 6699,
+    "to30m_m": 8624,
+    "to100m_m": 13681
+   }
+  ],
+  "bbox": [
+   -79.56,
+   8.98,
+   -79.33,
+   9.15
+  ],
+  "zoom": 13,
+  "river_vs_D8": [
+   {
+    "name": "Quebrada",
+    "osm_km_in_bbox": 27.9,
+    "pts": 1163,
+    "share_within_300m_of_D8": 0.51
+   },
+   {
+    "name": "Río Cabra",
+    "osm_km_in_bbox": 24.9,
+    "pts": 420,
+    "share_within_300m_of_D8": 0.55
+   },
+   {
+    "name": "Río Juan Díaz",
+    "osm_km_in_bbox": 21.7,
+    "pts": 458,
+    "share_within_300m_of_D8": 0.84
+   },
+   {
+    "name": "Río Tocumen",
+    "osm_km_in_bbox": 20.9,
+    "pts": 399,
+    "share_within_300m_of_D8": 0.9
+   },
+   {
+    "name": "Río Tapia",
+    "osm_km_in_bbox": 18.7,
+    "pts": 687,
+    "share_within_300m_of_D8": 0.82
+   },
+   {
+    "name": "Río Las Lajas",
+    "osm_km_in_bbox": 16.9,
+    "pts": 477,
+    "share_within_300m_of_D8": 0.97
+   },
+   {
+    "name": "Río Cabuya",
+    "osm_km_in_bbox": 14,
+    "pts": 362,
+    "share_within_300m_of_D8": 0.74
+   },
+   {
+    "name": "Río Abajo",
+    "osm_km_in_bbox": 13.1,
+    "pts": 410,
+    "share_within_300m_of_D8": 0.97
+   },
+   {
+    "name": "Río Matías Hernández",
+    "osm_km_in_bbox": 9.2,
+    "pts": 253,
+    "share_within_300m_of_D8": 0.94
+   },
+   {
+    "name": "Quebrada La Cabima",
+    "osm_km_in_bbox": 6.9,
+    "pts": 272,
+    "share_within_300m_of_D8": 0.67
+   },
+   {
+    "name": "Río Matasnillo",
+    "osm_km_in_bbox": 6.5,
+    "pts": 286,
+    "share_within_300m_of_D8": 0.71
+   },
+   {
+    "name": "Quebrada Las Mañanitas",
+    "osm_km_in_bbox": 6.2,
+    "pts": 218,
+    "share_within_300m_of_D8": 0.13
+   },
+   {
+    "name": "Quebrada Santa Rita",
+    "osm_km_in_bbox": 6,
+    "pts": 291,
+    "share_within_300m_of_D8": 1
+   },
+   {
+    "name": "Quebrada San Pablo",
+    "osm_km_in_bbox": 5.5,
+    "pts": 198,
+    "share_within_300m_of_D8": 0.75
+   },
+   {
+    "name": "Quebrada Palomo",
+    "osm_km_in_bbox": 5.4,
+    "pts": 202,
+    "share_within_300m_of_D8": 0.73
+   },
+   {
+    "name": "Río Tataré",
+    "osm_km_in_bbox": 5.4,
+    "pts": 87,
+    "share_within_300m_of_D8": 0.75
+   },
+   {
+    "name": "Río Curundú",
+    "osm_km_in_bbox": 4.9,
+    "pts": 124,
+    "share_within_300m_of_D8": 0.91
+   },
+   {
+    "name": "Quebrada La Gallinaza",
+    "osm_km_in_bbox": 4.6,
+    "pts": 55,
+    "share_within_300m_of_D8": 0.45
+   },
+   {
+    "name": "Río Caraño",
+    "osm_km_in_bbox": 4,
+    "pts": 70,
+    "share_within_300m_of_D8": 0.93
+   },
+   {
+    "name": "Río Naranjal",
+    "osm_km_in_bbox": 4,
+    "pts": 115,
+    "share_within_300m_of_D8": 0.93
+   },
+   {
+    "name": "Río Tagarete",
+    "osm_km_in_bbox": 4,
+    "pts": 118,
+    "share_within_300m_of_D8": 0.59
+   },
+   {
+    "name": "Quebrada Santa Elena",
+    "osm_km_in_bbox": 3.4,
+    "pts": 187,
+    "share_within_300m_of_D8": 0.4
+   },
+   {
+    "name": "Río Chilibre",
+    "osm_km_in_bbox": 3,
+    "pts": 50,
+    "share_within_300m_of_D8": 0.64
+   },
+   {
+    "name": "Río Mocambo",
+    "osm_km_in_bbox": 2.7,
+    "pts": 85,
+    "share_within_300m_of_D8": 0.44
+   },
+   {
+    "name": "Quebrada María Hernández",
+    "osm_km_in_bbox": 2.6,
+    "pts": 103,
+    "share_within_300m_of_D8": 1
+   },
+   {
+    "name": "Rio Sierpre",
+    "osm_km_in_bbox": 2.2,
+    "pts": 120,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Quebrada Iguana",
+    "osm_km_in_bbox": 2.1,
+    "pts": 122,
+    "share_within_300m_of_D8": 0
+   },
+   {
+    "name": "Quebrada La Bandera",
+    "osm_km_in_bbox": 2,
+    "pts": 53,
+    "share_within_300m_of_D8": 0.75
+   },
+   {
+    "name": "Río Chilibrillo",
+    "osm_km_in_bbox": 1.9,
+    "pts": 43,
+    "share_within_300m_of_D8": 1
+   },
+   {
+    "name": "Quebrada Cabuyita",
+    "osm_km_in_bbox": 1.7,
+    "pts": 53,
+    "share_within_300m_of_D8": 0.87
+   },
+   {
+    "name": "Quebrada Brazo de Cabuya",
+    "osm_km_in_bbox": 1.6,
+    "pts": 61,
+    "share_within_300m_of_D8": 0.84
+   },
+   {
+    "name": "Río Cardenas",
+    "osm_km_in_bbox": 1.5,
+    "pts": 30,
+    "share_within_300m_of_D8": 0.77
+   },
+   {
+    "name": "Quebrada Los Gallos",
+    "osm_km_in_bbox": 1.1,
+    "pts": 35,
+    "share_within_300m_of_D8": 0.29
+   },
+   {
+    "name": "Rio Tapia II",
+    "osm_km_in_bbox": 1,
+    "pts": 34,
+    "share_within_300m_of_D8": 0.29
+   },
+   {
+    "name": "Quebrada Salsipuedes",
+    "osm_km_in_bbox": 0.6,
+    "pts": 8,
+    "share_within_300m_of_D8": 1
+   },
+   {
+    "name": "Riachuelo Parque Los Almendros",
+    "osm_km_in_bbox": 0.2,
+    "pts": 7,
+    "share_within_300m_of_D8": 0
+   }
+  ],
+  "canals": [
+   "Canal de Panamá",
+   "Antiguo Canal Francés",
+   "Banana Cut"
+  ],
+  "osm_peaks": [
+   {
+    "name": "Cerro Cedro",
+    "lon": -79.5491,
+    "lat": 8.9955,
+    "ele": "155"
+   },
+   {
+    "name": "(unnamed)",
+    "lon": -79.5328,
+    "lat": 9.0606
+   },
+   {
+    "name": "La Montaña del Dulce Canto",
+    "lon": -79.5183,
+    "lat": 9.0595
+   }
+  ],
+  "highways": [
+   "Corredor Norte [motorway]",
+   "Avenida Omar Torrijos Herrera [trunk]",
+   "Corredor Sur [motorway]",
+   "Carretera Panamericana [trunk]",
+   "Autopista Panamá–Colón [motorway]",
+   "Avenida Balboa [trunk]",
+   "Avenida de los Mártires [trunk]",
+   "Avenida Balboa [motorway]",
+   "Avenida Balboa Viaducto [trunk]",
+   "Cinta Costera [trunk]",
+   "Cinta Costera [motorway]",
+   "Puente de las Américas [trunk]",
+   "Vía Centenario [motorway]",
+   "Vía Centenario [trunk]",
+   "Avenida La Paz [trunk]",
+   "Autopista Arraiján - La Chorrera [motorway]",
+   "Avenida Gaillard [trunk]",
+   "Corredor Norte [trunk]",
+   "Carretera Panamericana [motorway]",
+   "Carretera Presidente Roberto Francisco Chiari Remón [motorway]",
+   "Bulevar de las Américas [motorway]"
+  ],
+  "osm_wetland_km2": 15.7,
+  "osm_wetland_share_below_10m": 0.48,
+  "osm_wetland_polygons": 18,
+  "urban_mask": {
+   "source": "OSM landuse residential|commercial|industrial|retail (ways only; relations skipped)",
+   "polygons": 1383,
+   "urban": {
+    "cells_km2": 45.9,
+    "slope_pct_q": {
+     "0.1": 2.65,
+     "0.5": 7.949,
+     "0.9": 20.694,
+     "0.99": 36.039
+    },
+    "height_q": {
+     "0.1": 9,
+     "0.5": 43,
+     "0.9": 126,
+     "0.99": 175
+    },
+    "share_slope_gt_15pct": 0.207
+   },
+   "non_urban_land": {
+    "cells_km2": 366,
+    "slope_pct_q": {
+     "0.1": 2.65,
+     "0.5": 9.553,
+     "0.9": 27.021,
+     "0.99": 46.877
+    },
+    "height_q": {
+     "0.1": 5,
+     "0.5": 61,
+     "0.9": 210,
+     "0.99": 387
+    },
+    "share_slope_gt_15pct": 0.309
+   }
+  },
+  "places": [
+   {
+    "name": "Alcalde Díaz",
+    "place": "village",
+    "lon": -79.5409,
+    "lat": 9.1175,
+    "h": 139,
+    "slope_pct": 19.3,
+    "map_xy": [
+     5188,
+     4565
+    ]
+   },
+   {
+    "name": "Samaria",
+    "place": "neighbourhood",
+    "lon": -79.4943,
+    "lat": 9.0511,
+    "h": 71,
+    "slope_pct": 22.6,
+    "map_xy": [
+     4512,
+     3301
+    ]
+   },
+   {
+    "name": "Panamá La Vieja",
+    "place": "neighbourhood",
+    "lon": -79.494,
+    "lat": 9.008,
+    "h": 14,
+    "slope_pct": 15.4,
+    "map_xy": [
+     3834,
+     2948
+    ]
+   },
+   {
+    "name": "Río Abajo",
+    "place": "suburb",
+    "lon": -79.4936,
+    "lat": 9.0231,
+    "h": 16,
+    "slope_pct": 3.7,
+    "map_xy": [
+     4076,
+     3064
+    ]
+   },
+   {
+    "name": "San Miguelito",
+    "place": "suburb",
+    "lon": -79.4933,
+    "lat": 9.0551,
+    "h": 59,
+    "slope_pct": 13.2,
+    "map_xy": [
+     4583,
+     3318
+    ]
+   },
+   {
+    "name": "Torrijos Carter",
+    "place": "neighbourhood",
+    "lon": -79.4913,
+    "lat": 9.0783,
+    "h": 73,
+    "slope_pct": 10.9,
+    "map_xy": [
+     4965,
+     3474
+    ]
+   },
+   {
+    "name": "Chanis",
+    "place": "neighbourhood",
+    "lon": -79.4819,
+    "lat": 9.0228,
+    "h": 8,
+    "slope_pct": 5.9,
+    "map_xy": [
+     4165,
+     2879
+    ]
+   },
+   {
+    "name": "Cerro Viento",
+    "place": "neighbourhood",
+    "lon": -79.4558,
+    "lat": 9.0604,
+    "h": 28,
+    "slope_pct": 5.3,
+    "map_xy": [
+     4966,
+     2776
+    ]
+   },
+   {
+    "name": "Juan Díaz",
+    "place": "suburb",
+    "lon": -79.4441,
+    "lat": 9.0432,
+    "h": 17,
+    "slope_pct": 5.9,
+    "map_xy": [
+     4788,
+     2455
+    ]
+   },
+   {
+    "name": "Pedregal",
+    "place": "village",
+    "lon": -79.4266,
+    "lat": 9.0728,
+    "h": 38,
+    "slope_pct": 3.7,
+    "map_xy": [
+     5395,
+     2422
+    ]
+   },
+   {
+    "name": "Las Mañanitas",
+    "place": "village",
+    "lon": -79.4039,
+    "lat": 9.0932,
+    "h": 48,
+    "slope_pct": 5.9,
+    "map_xy": [
+     5899,
+     2233
+    ]
+   },
+   {
+    "name": "Belén",
+    "place": "neighbourhood",
+    "lon": -79.3934,
+    "lat": 9.0818,
+    "h": 21,
+    "slope_pct": 5.3,
+    "map_xy": [
+     5803,
+     1977
+    ]
+   },
+   {
+    "name": "Tocumen",
+    "place": "village",
+    "lon": -79.3817,
+    "lat": 9.092,
+    "h": 37,
+    "slope_pct": 3.7,
+    "map_xy": [
+     6057,
+     1877
+    ]
+   },
+   {
+    "name": "24 de Diciembre",
+    "place": "suburb",
+    "lon": -79.3628,
+    "lat": 9.0987,
+    "h": 34,
+    "slope_pct": 13.2,
+    "map_xy": [
+     6314,
+     1637
+    ]
+   },
+   {
+    "name": "Nuevo Tocumen",
+    "place": "suburb",
+    "lon": -79.3496,
+    "lat": 9.0902,
+    "h": 16,
+    "slope_pct": 7.5,
+    "map_xy": [
+     6285,
+     1362
+    ]
+   }
+  ],
+  "fragment_check": [
+   {
+    "fragment": "juan-diaz",
+    "engine_p50": 7.4,
+    "probe_p50": 7,
+    "engine_min": 3,
+    "probe_min": 3,
+    "engine_max": 13,
+    "probe_max": 13
+   },
+   {
+    "fragment": "las-mananitas",
+    "engine_p50": 55,
+    "probe_p50": 55,
+    "engine_min": 30.4,
+    "probe_min": 31,
+    "engine_max": 71.2,
+    "probe_max": 71
+   },
+   {
+    "fragment": "pedregal",
+    "engine_p50": 36.1,
+    "probe_p50": 36,
+    "engine_min": 24.6,
+    "probe_min": 25,
+    "engine_max": 52,
+    "probe_max": 52
+   },
+   {
+    "fragment": "samaria",
+    "engine_p50": 58.5,
+    "probe_p50": 59,
+    "engine_min": 31.8,
+    "probe_min": 33,
+    "engine_max": 90.3,
+    "probe_max": 90
+   },
+   {
+    "fragment": "tocumen",
+    "engine_p50": 36.5,
+    "probe_p50": 36,
+    "engine_min": 26.9,
+    "probe_min": 27,
+    "engine_max": 48.1,
+    "probe_max": 48
+   },
+   {
+    "fragment": "torrijos-carter",
+    "engine_p50": 71.9,
+    "probe_p50": 72,
+    "engine_min": 59,
+    "probe_min": 59,
+    "engine_max": 148.4,
+    "probe_max": 148
+   }
+  ]
+ }
+}
