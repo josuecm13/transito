@@ -1,0 +1,5 @@
+{"id":"tocumen-runways","provenance":{"attribution":"© OpenStreetMap contributors","bbox":[9.03,-79.43,9.12,-79.34],"date":"2026-11-22","licence":"ODbL 1.0 (https://opendatacommons.org/licenses/odbl/1-0/)","note":"aeroway=runway ways around Tocumen International Airport.","query":"[out:json][timeout:60];\nway[\"aeroway\"=\"runway\"](9.03,-79.43,9.12,-79.34);\nout geom;","simplify_m":20,"source":"Overpass API (https://overpass-api.de/api/interpreter), OpenStreetMap data"},"title":"Tocumen runways (aeroway=runway)","features":[
+{"coords":[[-79.39263,9.04756],[-79.37899,9.07157]],"id":26509209,"kind":"aeroway=runway","ref":"03R/21L"},
+{"coords":[[-79.38615,9.07475],[-79.3748,9.09364]],"id":26509273,"kind":"aeroway=runway","name":"Northern Runway","ref":"03L/21R"},
+{"coords":[[-79.38733,9.0728],[-79.38615,9.07475]],"id":1356273388,"kind":"aeroway=runway","name":"Northern Runway","ref":"03L/21R"}
+]}

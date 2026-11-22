@@ -1,0 +1,20 @@
+# Real -> map anchor pairs. Single source for the dev-time warp (tools/warp-lib.ts) and the
+# overlays in specs/map/refs/. Never read by the game at runtime; nothing here is written to
+# world.yaml automatically.
+#   real: [lon, lat]   WGS84, verified against OpenStreetMap on 2026-11-22 (Overpass) unless noted
+#   map:  [x, y]       metres in the world.yaml frame (y = 0 is the Pacific edge)
+# The 11 pairs of docs/map-reshape/02-alternatives/approaches.md. They are NOT fold-free: run
+#   node tools/bake-refs.mjs --fold
+# to list the folded triangles. Real positions: (c) OpenStreetMap contributors.
+anchors:
+  - { id: colon,               real: [-79.8974, 9.3553], map: [1750, 7050], note: "OSM node 339209702 place=city 'Colón'" }
+  - { id: gatun-locks,         real: [-79.9226, 9.2737], map: [500, 6500],  note: "OSM relations 12228856/57 'Esclusas de Gatún'; map = landmark atlantic-locks" }
+  - { id: gamboa,              real: [-79.7003, 9.1181], map: [1300, 3600], note: "OSM node 969635181 place=village 'Gamboa'" }
+  - { id: miraflores-locks,    real: [-79.5906, 8.9975], map: [1400, 1500], note: "OSM node 2694731965 'Esclusas de Miraflores'; map = landmark pacific-locks" }
+  - { id: bridge-of-the-americas, real: [-79.5640, 8.9436], map: [1300, 400], note: "OSM way 745707421 man_made=bridge; map = landmark arch-bridge" }
+  - { id: casco-viejo,         real: [-79.5347, 8.9525], map: [2400, 400],  note: "OSM node 7785704043 place=quarter 'Casco Viejo'; map = landmark old-quarter" }
+  - { id: albrook,             real: [-79.5524, 8.9729], map: [1800, 1800], note: "OSM way 273732972 shop=mall 'Albrook Mall'; map = landmark albrook" }
+  - { id: punta-pacifica,      real: [-79.5079, 8.9764], map: [3900, 550],  note: "OSM node 113116536 place=neighbourhood; map = shore vertex 'Punta Pacífica point'" }
+  - { id: panama-viejo,        real: [-79.4889, 9.0084], map: [3900, 1020], note: "OSM way 317525706 'Conjunto Monumental de Panama Viejo'; map = K/E seam proposed in panama-city-signature-places.md. The (8.9953, -79.499) in that doc was from memory and is 1.5 km off" }
+  - { id: costa-del-este,      real: [-79.4681, 9.0132], map: [4500, 900],  note: "OSM node 635484936 place=quarter; map = landmark gated-community" }
+  - { id: tocumen-terminal,    real: [-79.3869, 9.0668], map: [5600, 1700], note: "OSM relation 17981614 'Terminal 1 Tocumen International Airport'; map = landmark passenger-terminal" }

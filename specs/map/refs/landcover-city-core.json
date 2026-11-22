@@ -1,0 +1,40 @@
+{
+ "bbox": [
+  8.935,
+  -79.57,
+  9.03,
+  -79.49
+ ],
+ "bbox_area_km2": 92.54,
+ "classes_km2": {
+  "farmland": 1.09,
+  "forest": 16.166,
+  "urban": 8.074,
+  "water": 0.038,
+  "wetland": 1.297
+ },
+ "district": "city-core",
+ "id": "city-core",
+ "polygons": {
+  "farmland": 643,
+  "forest": 142,
+  "urban": 783,
+  "water": 11,
+  "wetland": 15
+ },
+ "provenance": {
+  "attribution": "© OpenStreetMap contributors",
+  "bbox": [
+   8.935,
+   -79.57,
+   9.03,
+   -79.49
+  ],
+  "date": "2026-11-22",
+  "licence": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/1-0/)",
+  "note": "Polygon areas by OSM tag class (forest: natural=wood+landuse=forest; wetland: natural=wetland+natural=mangrove; urban: landuse=residential+landuse=commercial+landuse=retail+landuse=industrial; farmland: landuse=farmland+landuse=meadow+landuse=orchard+landuse=farmyard+landuse=grass; water: natural=water), clipped to the bbox. Approximate real counterpart of game zone city-core: Casco Viejo to Panamá Viejo, inland to Albrook/Calidonia. Only closed ways and assembled relation outer rings count; inner rings ignored.",
+  "query": "[out:json][timeout:120];\n(way[\"natural\"=\"wood\"](8.935,-79.57,9.03,-79.49);relation[\"natural\"=\"wood\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"forest\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"forest\"](8.935,-79.57,9.03,-79.49);way[\"natural\"=\"wetland\"](8.935,-79.57,9.03,-79.49);relation[\"natural\"=\"wetland\"](8.935,-79.57,9.03,-79.49);way[\"natural\"=\"mangrove\"](8.935,-79.57,9.03,-79.49);relation[\"natural\"=\"mangrove\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"residential\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"residential\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"commercial\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"commercial\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"retail\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"retail\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"industrial\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"industrial\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"farmland\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"farmland\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"meadow\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"meadow\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"orchard\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"orchard\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"farmyard\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"farmyard\"](8.935,-79.57,9.03,-79.49);way[\"landuse\"=\"grass\"](8.935,-79.57,9.03,-79.49);relation[\"landuse\"=\"grass\"](8.935,-79.57,9.03,-79.49);way[\"natural\"=\"water\"](8.935,-79.57,9.03,-79.49);relation[\"natural\"=\"water\"](8.935,-79.57,9.03,-79.49););\nout geom;",
+  "simplify_m": 0,
+  "source": "Overpass API (https://overpass-api.de/api/interpreter), OpenStreetMap data"
+ }
+}

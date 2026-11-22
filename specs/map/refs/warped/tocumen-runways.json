@@ -1,0 +1,5 @@
+{"id":"tocumen-runways","outside_land":{"fraction":0.167,"max_distance_m":73,"outside":1,"total":6},"provenance":{"attribution":"© OpenStreetMap contributors","date":"2026-11-22","licence":"ODbL 1.0 (https://opendatacommons.org/licenses/odbl/1-0/)","note":"Derived from specs/map/refs/tocumen-runways.json","source":"Overpass API (https://overpass-api.de/api/interpreter), OpenStreetMap data"},"title":"Tocumen runways (aeroway=runway)","warning":"WARPED DRAFT in the map frame through specs/map/anchors.yaml (piecewise-affine). A ruler for overlays and first drafts, not geometry: take metrics from the unwarped ref.","warped_draft":true,"features":[
+{"id":26509209,"kind":"aeroway=runway","xy":[[6073,1081],[5723,1762]]},
+{"id":26509273,"kind":"aeroway=runway","name":"Northern Runway","xy":[[5345,1979],[5092,2505]]},
+{"id":1356273388,"kind":"aeroway=runway","name":"Northern Runway","xy":[[5370,1924],[5345,1979]]}
+]}

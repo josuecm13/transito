@@ -1,0 +1,40 @@
+{
+ "bbox": [
+  9.03,
+  -79.52,
+  9.14,
+  -79.38
+ ],
+ "bbox_area_km2": 187.52,
+ "classes_km2": {
+  "farmland": 4.292,
+  "forest": 24.231,
+  "urban": 22.93,
+  "water": 0.364,
+  "wetland": 3.27
+ },
+ "district": "tito-corridor",
+ "id": "tito-corridor",
+ "polygons": {
+  "farmland": 192,
+  "forest": 62,
+  "urban": 425,
+  "water": 30,
+  "wetland": 3
+ },
+ "provenance": {
+  "attribution": "© OpenStreetMap contributors",
+  "bbox": [
+   9.03,
+   -79.52,
+   9.14,
+   -79.38
+  ],
+  "date": "2026-11-22",
+  "licence": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/1-0/)",
+  "note": "Polygon areas by OSM tag class (forest: natural=wood+landuse=forest; wetland: natural=wetland+natural=mangrove; urban: landuse=residential+landuse=commercial+landuse=retail+landuse=industrial; farmland: landuse=farmland+landuse=meadow+landuse=orchard+landuse=farmyard+landuse=grass; water: natural=water), clipped to the bbox. Approximate real counterpart of game zone tito-corridor: San Miguelito, Juan Díaz, Pedregal, Tocumen town. Only closed ways and assembled relation outer rings count; inner rings ignored.",
+  "query": "[out:json][timeout:120];\n(way[\"natural\"=\"wood\"](9.03,-79.52,9.14,-79.38);relation[\"natural\"=\"wood\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"forest\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"forest\"](9.03,-79.52,9.14,-79.38);way[\"natural\"=\"wetland\"](9.03,-79.52,9.14,-79.38);relation[\"natural\"=\"wetland\"](9.03,-79.52,9.14,-79.38);way[\"natural\"=\"mangrove\"](9.03,-79.52,9.14,-79.38);relation[\"natural\"=\"mangrove\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"residential\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"residential\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"commercial\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"commercial\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"retail\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"retail\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"industrial\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"industrial\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"farmland\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"farmland\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"meadow\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"meadow\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"orchard\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"orchard\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"farmyard\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"farmyard\"](9.03,-79.52,9.14,-79.38);way[\"landuse\"=\"grass\"](9.03,-79.52,9.14,-79.38);relation[\"landuse\"=\"grass\"](9.03,-79.52,9.14,-79.38);way[\"natural\"=\"water\"](9.03,-79.52,9.14,-79.38);relation[\"natural\"=\"water\"](9.03,-79.52,9.14,-79.38););\nout geom;",
+  "simplify_m": 0,
+  "source": "Overpass API (https://overpass-api.de/api/interpreter), OpenStreetMap data"
+ }
+}

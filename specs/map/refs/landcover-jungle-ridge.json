@@ -1,0 +1,40 @@
+{
+ "bbox": [
+  9.14,
+  -79.78,
+  9.28,
+  -79.62
+ ],
+ "bbox_area_km2": 272.76,
+ "classes_km2": {
+  "farmland": 0,
+  "forest": 81.292,
+  "urban": 11.22,
+  "water": 5.073,
+  "wetland": 1.891
+ },
+ "district": "jungle-ridge",
+ "id": "jungle-ridge",
+ "polygons": {
+  "farmland": 0,
+  "forest": 25,
+  "urban": 61,
+  "water": 20,
+  "wetland": 19
+ },
+ "provenance": {
+  "attribution": "© OpenStreetMap contributors",
+  "bbox": [
+   9.14,
+   -79.78,
+   9.28,
+   -79.62
+  ],
+  "date": "2026-11-22",
+  "licence": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/1-0/)",
+  "note": "Polygon areas by OSM tag class (forest: natural=wood+landuse=forest; wetland: natural=wetland+natural=mangrove; urban: landuse=residential+landuse=commercial+landuse=retail+landuse=industrial; farmland: landuse=farmland+landuse=meadow+landuse=orchard+landuse=farmyard+landuse=grass; water: natural=water), clipped to the bbox. Approximate real counterpart of game zone jungle-ridge: Soberanía / Camino de Cruces / Transístmica ridge. Only closed ways and assembled relation outer rings count; inner rings ignored.",
+  "query": "[out:json][timeout:120];\n(way[\"natural\"=\"wood\"](9.14,-79.78,9.28,-79.62);relation[\"natural\"=\"wood\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"forest\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"forest\"](9.14,-79.78,9.28,-79.62);way[\"natural\"=\"wetland\"](9.14,-79.78,9.28,-79.62);relation[\"natural\"=\"wetland\"](9.14,-79.78,9.28,-79.62);way[\"natural\"=\"mangrove\"](9.14,-79.78,9.28,-79.62);relation[\"natural\"=\"mangrove\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"residential\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"residential\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"commercial\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"commercial\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"retail\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"retail\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"industrial\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"industrial\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"farmland\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"farmland\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"meadow\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"meadow\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"orchard\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"orchard\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"farmyard\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"farmyard\"](9.14,-79.78,9.28,-79.62);way[\"landuse\"=\"grass\"](9.14,-79.78,9.28,-79.62);relation[\"landuse\"=\"grass\"](9.14,-79.78,9.28,-79.62);way[\"natural\"=\"water\"](9.14,-79.78,9.28,-79.62);relation[\"natural\"=\"water\"](9.14,-79.78,9.28,-79.62););\nout geom;",
+  "simplify_m": 0,
+  "source": "Overpass API (https://overpass-api.de/api/interpreter), OpenStreetMap data"
+ }
+}
