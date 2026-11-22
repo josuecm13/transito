@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { assertDifferentData, assertSameData, determinismTest } from './determinism.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildWorldData } from '../src/world/world-data.ts';
@@ -387,10 +388,10 @@ test('real area: sidewalk and alley walkways never run on a carriageway (only cr
   }
 });
 
-test('real area: deterministic', () => {
-  assert.deepEqual(buildWalkGraph(streets.graph, slice.isPlayableLand, data.spec.population.pedestrians.walkOn), graph);
+determinismTest('buildWalkGraph on the real area is repeatable', () => {
+  assertSameData(buildWalkGraph(streets.graph, slice.isPlayableLand, data.spec.population.pedestrians.walkOn), graph, 'buildWalkGraph(walkOn)');
   // Default walkOn (every class) = world.yaml's current list.
-  assert.deepEqual(buildWalkGraph(streets.graph, slice.isPlayableLand), graph);
+  assertSameData(buildWalkGraph(streets.graph, slice.isPlayableLand), graph, 'buildWalkGraph(default walkOn)');
 });
 
 // ---------- sim helpers ----------

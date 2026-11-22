@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { assertDifferentData, assertSameData, determinismTest } from './determinism.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseWorldSpec } from '../src/world/spec.ts';
@@ -77,9 +78,9 @@ test('deriveCity produces parcels and buildings (real area and synthetic)', () =
   }
 });
 
-test('determinism: same input → deep-equal city', () => {
-  assert.deepEqual(deriveCity(spec, slice, net), city);
-  assert.deepEqual(deriveCity(synSpec, synSlice, syntheticNet()), synCity);
+determinismTest('same input → identical city', () => {
+  assertSameData(deriveCity(spec, slice, net), city, 'deriveCity(real area)');
+  assertSameData(deriveCity(synSpec, synSlice, syntheticNet()), synCity, 'deriveCity(synthetic)');
 });
 
 test('every building lies inside exactly one parcel (strict containment, no overlap with others)', () => {

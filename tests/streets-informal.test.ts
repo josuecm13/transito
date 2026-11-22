@@ -9,6 +9,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { assertDifferentData, assertSameData, determinismTest } from './determinism.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { load } from 'js-yaml';
@@ -89,11 +90,11 @@ test('organic growth produced streets and alleys in tito-corridor', () => {
   assert.equal(net.stats.shortEdgesLeft, 0);
 });
 
-test('determinism: same seed + spec → deep-equal network; another seed → different corridor', () => {
-  assert.deepEqual(generateStreets(spec, slice), net);
+determinismTest('same seed + spec → identical network; another seed → different corridor', () => {
+  assertSameData(generateStreets(spec, slice), net, 'generateStreets(same seed)');
   const other = generateStreets(spec, slice, { seed: spec.streetStyles.seed + 1 });
   const mine = (n: StreetNetwork) => n.graph.edges.filter((e) => e.district === ID).map((e) => [n.graph.nodes[e.a], n.graph.nodes[e.b]]);
-  assert.notDeepEqual(mine(other), mine(net));
+  assertDifferentData(mine(other), mine(net), 'corridor edges for seed + 1 vs seed')
 });
 
 test('planar on the real area with growth on: no crossing without a node, no nodes within 1 m, no non-alley edge < 8 m', () => {

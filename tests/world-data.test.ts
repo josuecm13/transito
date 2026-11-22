@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { assertDifferentData, assertSameData, determinismTest } from './determinism.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildWorldData } from '../src/world/world-data.ts';
@@ -27,11 +28,11 @@ test('buildWorldData: median of 3 runs under budget (first run is cold)', () => 
   assert.ok(median < BUDGET_MS, `median ${median.toFixed(0)} ms >= ${BUDGET_MS} ms`);
 });
 
-test('buildWorldData: same yaml → deep-equal data (functions aside)', () => {
+determinismTest('buildWorldData: same yaml → identical data (functions aside)', () => {
   // slice.isPlayableLand is a closure (one per call), so compare everything else.
   const strip = (d: WorldData) => ({ ...d, slice: { ...d.slice, isPlayableLand: undefined } });
-  assert.deepEqual(strip(runs[1]!.data), strip(first));
-  assert.deepEqual(strip(runs[2]!.data), strip(first));
+  assertSameData(strip(runs[1]!.data), strip(first), 'buildWorldData run 2 vs run 1');
+  assertSameData(strip(runs[2]!.data), strip(first), 'buildWorldData run 3 vs run 1');
 });
 
 test('buildWorldData: buildings are the city buildings; every part is populated', () => {

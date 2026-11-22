@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { assertDifferentData, assertSameData, determinismTest } from './determinism.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { districtAt, parseWorldSpec } from '../src/world/spec.ts';
@@ -22,11 +23,11 @@ test('real area: the generator produced a street network and blocks', () => {
   assert.equal(net.stats.shortEdgesLeft, 0);
 });
 
-test('determinism: same seed + spec → deep-equal graph and blocks; another seed differs', () => {
+determinismTest('same seed + spec → identical graph and blocks; another seed differs', () => {
   const again = generateStreets(spec, slice);
-  assert.deepEqual(again, net);
+  assertSameData(again, net, 'generateStreets(same seed)');
   const other = generateStreets(spec, slice, { seed: spec.streetStyles.seed + 1 });
-  assert.notDeepEqual(other.graph, net.graph);
+  assertDifferentData(other.graph, net.graph, 'generateStreets(seed + 1).graph vs seed graph');
 });
 
 test('real area: planar (no crossing without a node), no nodes within 1 m, no street edge < 8 m', () => {
