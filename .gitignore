@@ -9,3 +9,4 @@ playwright-report/
 
 # Story spoilers kept local only (history rewrite pending)
 specs/story/premise.md
+.cache/
