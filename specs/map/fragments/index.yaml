@@ -1,0 +1,52 @@
+# TRÁNSITO fragments registry — slug → engine import area. Written by tools/geo-fragments.mjs (import / register).
+# Fragments are small real-place squares (default 800 m, cap 2 km²) used as inspiration only.
+fragments:
+  juan-diaz:
+    import_area_id: "b5253242-40b9-47eb-89bc-bb999b427a93"
+    place_name: "Llano Bonito"
+    center: [9.0326, -79.4595]
+    size_m: 800
+    bbox: [-79.46313836341503, 9.029006755300037, -79.45586163658498, 9.036193244699964]
+  la-carpio:
+    import_area_id: "6320bab5-c7e1-436d-a7bd-c542ee355cb7"
+    place_name: "La Carpio"
+    center: [9.9624144, -84.1495403]
+    size_m: 1180
+    bbox: [-84.1560494, 9.9581759, -84.1430313, 9.9666528]
+  la-carpio-seed:
+    import_area_id: "b9995d49-b2d3-458e-871e-dd8a377286f8"
+    place_name: "La Carpio"
+    center: [9.9624, -84.1495]
+    size_m: 700
+    bbox: [-84.15269222305908, 9.959255910887531, -84.14630777694093, 9.96554408911247]
+    note: "700 m well-mapped analogue of La Carpio for seed streets and building fill"
+  las-mananitas:
+    import_area_id: "226ef5f9-fba9-404b-9ca0-3f604c104cbb"
+    place_name: "Las Mañanitas"
+    center: [9.0932, -79.4039]
+    size_m: 800
+    bbox: [-79.40753897729097, 9.089606755300036, -79.40026102270902, 9.096793244699963]
+  pedregal:
+    import_area_id: "2ae4b361-1174-4df6-a501-7ddf682f9173"
+    place_name: "Pedregal"
+    center: [9.0728, -79.4266]
+    size_m: 800
+    bbox: [-79.43023877016202, 9.069206755300037, -79.42296122983797, 9.076393244699965]
+  samaria:
+    import_area_id: "d8aac12f-8cbc-4734-a66e-142e3297eed4"
+    place_name: "Belisario Porras"
+    center: [9.0511, -79.4943]
+    size_m: 800
+    bbox: [-79.49793855036582, 9.047506755300036, -79.49066144963417, 9.054693244699964]
+  tocumen:
+    import_area_id: "471c8749-79ce-4a7e-afaf-f7acea11b0b5"
+    place_name: "Tocumen"
+    center: [9.092, -79.3817]
+    size_m: 800
+    bbox: [-79.3853389650935, 9.088406755300037, -79.3780610349065, 9.095593244699964]
+  torrijos-carter:
+    import_area_id: "c60a736a-b36a-41d1-8588-c829f22bea21"
+    place_name: "Belisario Frías"
+    center: [9.0783, -79.4913]
+    size_m: 800
+    bbox: [-79.49493882595787, 9.074706755300037, -79.48766117404212, 9.081893244699964]

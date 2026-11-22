@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "capture": "node tools/capture.mjs",
     "references": "node tools/reference-sectors.mjs",
+    "geo": "node tools/geo-fragments.mjs",
     "isthmus": "node tools/render-isthmus.ts",
     "test": "node --test \"tests/**/*.test.ts\""
   },
