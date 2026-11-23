@@ -3,7 +3,9 @@
  *   blocks → buildable area → land use → parcels (non park/court/median) → buildings.
  * Pure and deterministic: same spec + slice + network → deep-equal result. Randomness comes from
  * forks of createRng(blockout.seed): `landuse:<district>`, `parcels:<block id>`,
- * `buildings:<district>`.
+ * `buildings:<district>`, `frontage:<block id>`.
+ * A district with `method: frontage-lots` skips parcels: its blocks get lots laid along their
+ * street frontage (frontage-lots.ts) and the buildings carry `parcel: -1`.
  */
 import type { WorldSpec } from '../spec.ts';
 import type { WorldSlice } from '../slice.ts';
@@ -16,7 +18,9 @@ import { assignLandUse } from './land-use.ts';
 import type { Parcel, ParcelParams } from './parcels.ts';
 import { parcelParamsFromLot, subdividePart } from './parcels.ts';
 import type { CityBuilding } from './buildings.ts';
-import { placeBuildings } from './buildings.ts';
+import { distToRing, placeBuildings } from './buildings.ts';
+import { buildingCorners } from '../blockout.ts';
+import { frontageEdgesOfParts, frontageLots } from './frontage-lots.ts';
 import { clipStats } from './poly.ts';
 
 export interface City {
@@ -67,7 +71,7 @@ export function deriveCity(spec: WorldSpec, slice: WorldSlice, net: StreetNetwor
     if (use !== 'residential' && use !== 'commercial') continue;
     const district = block.district;
     const cfg = district !== undefined ? spec.blockout.districts[district] : undefined;
-    if (!cfg || district === undefined) continue;
+    if (!cfg || district === undefined || cfg.method === 'frontage-lots') continue;
     const params = { ...parcelParamsFromLot(cfg.lot), ...opts.parcels?.[district] };
     const rng = root.fork(`parcels:${block.id}`);
     for (const part of (buildable[block.id] as BuildableArea).parts) {
@@ -78,6 +82,21 @@ export function deriveCity(spec: WorldSpec, slice: WorldSlice, net: StreetNetwor
   }
   mark('parcels');
   const buildings = placeBuildings(spec, parcels, slice.landmarks, root);
+  for (const block of net.blocks) {
+    const use = (landUse[block.id] as BlockLandUse).use;
+    if (use !== 'residential' && use !== 'commercial') continue;
+    const district = block.district;
+    const cfg = district !== undefined ? spec.blockout.districts[district] : undefined;
+    if (!cfg || district === undefined || cfg.method !== 'frontage-lots' || !cfg.frontageLots) continue;
+    const parts = (buildable[block.id] as BuildableArea).parts;
+    const edges = frontageEdgesOfParts(parts, keepOuts);
+    for (const lot of frontageLots({ parts, edges, cfg: cfg.frontageLots, rng: root.fork(`frontage:${block.id}`), key: String(block.id) })) {
+      const b = { center: lot.center, width: lot.width, depth: lot.depth, angle: lot.angle };
+      const ring = buildingCorners(b);
+      if (slice.landmarks.some((lm) => distToRing(lm.position, ring) < spec.blockout.landmarkClearance)) continue;
+      buildings.push({ ...b, height: lot.height, district, parcel: -1, block: block.id });
+    }
+  }
   mark('buildings');
   const stats = { clipRetries: clipStats.retries - clip0.retries, clipFallbacks: clipStats.fallbacks - clip0.fallbacks };
   return { buildable, landUse, parcels, buildings, stats };

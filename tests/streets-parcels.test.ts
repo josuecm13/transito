@@ -54,7 +54,7 @@ const synLandmark = { id: 'lm', district: 'd', position: v(385, 385), kind: 'tes
 const synSpec: WorldSpec = {
   ...spec,
   routes: [],
-  blockout: { seed: 7, landmarkClearance: 18, districts: { d: { lot: 22, footprint: [8, 16], height: [4, 10], setback: 4, fill: 0.9, angle: 0 } } },
+  blockout: { seed: 7, landmarkClearance: 18, districts: { d: { lot: 22, footprint: [8, 16], height: [4, 10], setback: 4, fill: 0.9, angle: 0, method: 'parcels' } } },
   streetStyles: {
     ...spec.streetStyles,
     districts: { d: { style: 'formal', field: [], spacing: { collector: 400, local: 50 }, reference: [], landUse: { park: 0.1, court: 0.1 } } },

@@ -54,6 +54,35 @@ export interface StreetProfile {
   sidewalk: number;
 }
 
+/** A measured quantity as { median, iqr } (same shape as the engine's Spread). */
+export interface Spread {
+  median: number;
+  iqr: number;
+}
+
+/**
+ * Fingerprint of a frontage-lots district (`blockout.districts.<id>.frontage_lots`): what the
+ * buildings along a street look like, measured on a real place. See README "Streets".
+ */
+export interface FrontageLots {
+  /** m along the frontage. */
+  width: Spread;
+  /** m, perpendicular to the frontage. */
+  depth: Spread;
+  /** Only the median is used (m): the front face sits this far inside the buildable line. */
+  frontSetback: Spread;
+  /** m between neighbouring buildings along a frontage. */
+  sideGap: Spread;
+  /** Share of the frontage the buildings cover (0–1). Measured outcome; the realism test target. */
+  coverage: number;
+  /** Share of 2-storey buildings among 1- and 2-storey ones (0–1). */
+  twoStoreyShare: number;
+  /** m per storey. */
+  levelHeight: number;
+  /** Informal-settlement jitter: rotation ± degrees, offset ± metres (along / inward). */
+  jitter: { rotation: number; offset: number };
+}
+
 export interface BlockoutDistrict {
   lot: number;
   footprint: Range;
@@ -61,6 +90,10 @@ export interface BlockoutDistrict {
   setback: number;
   fill: number;
   angle: number;
+  /** Building method: 'parcels' (default; one building per parcel) or 'frontage-lots'. */
+  method: 'parcels' | 'frontage-lots';
+  /** Present exactly when method is 'frontage-lots'. */
+  frontageLots?: FrontageLots;
 }
 
 export interface Blockout {
@@ -243,6 +276,42 @@ class Reader {
     if (v.length < min) this.problems.push(`${path}: needs at least ${min} points`);
     return v.map((p, i) => this.point(p, `${path}[${i}]`));
   }
+}
+
+
+function parseSpread(r: Reader, v: unknown, path: string, minMedian: number): Spread {
+  const o = r.obj(v, path);
+  if (!o) return { median: NaN, iqr: NaN };
+  const median = r.num(o, 'median', path);
+  const iqr = r.num(o, 'iqr', path);
+  if (median < minMedian) r.problems.push(`${path}.median: must be >= ${minMedian}`);
+  if (iqr < 0) r.problems.push(`${path}.iqr: must be >= 0`);
+  return { median, iqr };
+}
+
+function parseFrontageLots(r: Reader, v: unknown, path: string): FrontageLots | undefined {
+  const o = r.obj(v, path);
+  if (!o) return undefined;
+  const unit = (key: string): number => {
+    const x = r.num(o, key, path);
+    if (!(x >= 0 && x <= 1)) r.problems.push(`${path}.${key}: must be in [0, 1]`);
+    return x;
+  };
+  const levelHeight = r.num(o, 'level_height', path);
+  if (!(levelHeight > 0)) r.problems.push(`${path}.level_height: must be > 0`);
+  const jr = r.obj(o.jitter, `${path}.jitter`);
+  const jitter = { rotation: jr ? r.num(jr, 'rotation', `${path}.jitter`) : NaN, offset: jr ? r.num(jr, 'offset', `${path}.jitter`) : NaN };
+  if (jitter.rotation < 0 || jitter.offset < 0) r.problems.push(`${path}.jitter: rotation and offset must be >= 0`);
+  return {
+    width: parseSpread(r, o.width, `${path}.width`, 1),
+    depth: parseSpread(r, o.depth, `${path}.depth`, 1),
+    frontSetback: parseSpread(r, o.front_setback, `${path}.front_setback`, 0),
+    sideGap: parseSpread(r, o.side_gap, `${path}.side_gap`, 0),
+    coverage: unit('coverage'),
+    twoStoreyShare: unit('two_storey_share'),
+    levelHeight,
+    jitter,
+  };
 }
 
 export function parseWorldSpec(rawYaml: string): WorldSpec {
@@ -428,14 +497,20 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
         if (!districtIds.has(id)) r.problems.push(`${path}: unknown district "${id}"`);
         const o = r.obj(raw, path);
         if (!o) continue;
-        blockout.districts[id] = {
+        const method = o.method ?? 'parcels';
+        if (method !== 'parcels' && method !== 'frontage-lots') r.problems.push(`${path}.method: expected "parcels" or "frontage-lots"`);
+        const district: BlockoutDistrict = {
           lot: r.num(o, 'lot', path),
           footprint: r.pair(o.footprint, `${path}.footprint`),
           height: r.pair(o.height, `${path}.height`),
           setback: r.num(o, 'setback', path),
           fill: r.num(o, 'fill', path),
           angle: r.num(o, 'angle', path),
+          method: method === 'frontage-lots' ? 'frontage-lots' : 'parcels',
         };
+        if (method === 'frontage-lots') district.frontageLots = parseFrontageLots(r, o.frontage_lots, `${path}.frontage_lots`);
+        else if (o.frontage_lots !== undefined) r.problems.push(`${path}.frontage_lots: only valid with method "frontage-lots"`);
+        blockout.districts[id] = district;
       }
     }
   }

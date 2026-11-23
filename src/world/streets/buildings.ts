@@ -27,6 +27,7 @@ import { distToSegment, ringCentroid, ringInsidePoly } from './poly.ts';
 
 /** Superset of the blockout Building: renderers / physics can consume it unchanged. */
 export interface CityBuilding extends Building {
+  /** Parcel id, or -1 for a frontage-lots building (no parcel; see frontage-lots.ts). */
   parcel: number;
   block: number;
 }
@@ -37,7 +38,7 @@ const CLEARANCE = 0.25;
 const MIN_SCALE = 0.6;
 
 /** Distance from p to a convex footprint (0 inside). */
-function distToRing(p: Vec2, ring: readonly Vec2[]): number {
+export function distToRing(p: Vec2, ring: readonly Vec2[]): number {
   if (pointInPolygon(p, ring)) return 0;
   let best = Infinity;
   for (let i = 0; i < ring.length; i++) best = Math.min(best, distToSegment(p, ring[i] as Vec2, ring[(i + 1) % ring.length] as Vec2));

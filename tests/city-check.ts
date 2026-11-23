@@ -77,6 +77,7 @@ export function buildingsInParcels(city: City): string[] {
   const byBlock = new Map<number, number[]>();
   for (const p of city.parcels) byBlock.set(p.block, [...(byBlock.get(p.block) ?? []), p.id]);
   city.buildings.forEach((b, i) => {
+    if (b.parcel === -1) return; // frontage-lots building: no parcel (tests/streets-frontage-lots.test.ts)
     const corners = buildingCorners(b);
     const own = city.parcels[b.parcel];
     if (!own || own.id !== b.parcel) return void bad.push(`building ${i}: unknown parcel ${b.parcel}`);

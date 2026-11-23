@@ -245,13 +245,41 @@ blockout:
   seed: 1
   landmark_clearance: 18
   districts:
-    tito-corridor:  { lot: 22, footprint: [8, 16],  height: [4, 10],  setback: 4,  fill: 0.75, angle: 12 }
+    tito-corridor:
+      lot: 22
+      footprint: [8, 16]
+      height: [4, 10]
+      setback: 4
+      fill: 0.75
+      angle: 12
+      method: frontage-lots
+      # Fingerprint of La Carpio (San José, Costa Rica; real informal barrio): median over the 47
+      # blocks of engine run a249a461-91e7-4299-961e-5b9b16e0f1d8 (generation run 2026-10-11, import
+      # area 6320bab5-c7e1-436d-a7bd-c542ee355cb7, bbox of street_styles tito-corridor reference).
+      # Per block the engine measured median + IQR of each quantity; here: median of the block
+      # medians, and median of the block IQRs. Fresh 700 m seed fragment (area b9995d49-b2d3-458e-
+      # 871e-dd8a377286f8, run 0a3f59d8, 2026-11-22, 20 blocks) agrees: width 9.0, depth 11.9,
+      # setback 0.87, gap 0, coverage 0.99. Source: OpenStreetMap buildings and streets,
+      # © OpenStreetMap contributors. No levels are tagged in the area (storeys are drawn).
+      frontage_lots:
+        width:         { median: 9.0,  iqr: 4.5 }   # m along the frontage
+        depth:         { median: 12.2, iqr: 5.5 }   # m into the block
+        front_setback: { median: 1.1,  iqr: 2.2 }   # m from the buildable line (street buffer); only the median is used
+        side_gap:      { median: 0.0,  iqr: 0.0 }   # m between neighbours: continuous rows
+        coverage: 0.98          # 0–1, share of the frontage covered by buildings (outcome measured on La Carpio; the realism test target)
+        two_storey_share: 0.3   # 0–1, share of 2-storey houses among 1/2-storey (engine default; no levels tagged)
+        level_height: 3         # m per storey (engine default)
+        jitter: { rotation: 8, offset: 1 }   # deg ± / m ± (along, inward): the engine's informal-settlement jitter
     airport:        { lot: 70, footprint: [20, 45], height: [6, 14],  setback: 15, fill: 0.2,  angle: 0 }
     costa-del-este: { lot: 40, footprint: [14, 24], height: [20, 60], setback: 8,  fill: 0.5,  angle: -8 }
 
 # Ambient population. Agents spawn out of view around the focus (the player) and despawn far away.
 population:
   pedestrians:
+# method: parcels (default) = one centred building per parcel, from the numbers above.
+# method: frontage-lots     = buildings laid along each block's street frontage from a measured
+#   fingerprint (`frontage_lots`, see README "Streets"); lot/footprint/height/setback/fill/angle
+#   are then unused by the generator (kept: the map validator still reads them).
     budget: 40              # max alive at once
     spawn_ring: [60, 140]   # meters from focus: spawn between min and max
     despawn_at: 180         # meters from focus

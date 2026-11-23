@@ -11,5 +11,6 @@ export * from './poly.ts';
 export * from './buildable.ts';
 export * from './parcels.ts';
 export * from './buildings.ts';
+export * from './frontage-lots.ts';
 export * from './land-use.ts';
 export * from './city.ts';
