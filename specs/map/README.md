@@ -80,6 +80,21 @@ Real-world distances are compressed non-uniformly:
 | Tito's corridor, airport, Colón | ~1:4 | Dense but repetitive |
 | Canal, lake, jungle | ~1:10 | Scenic, cheap to build, fast to cross |
 
+## Human scale
+
+Distances are compressed; the human-sized measures are **not**. `scale:` in `world.yaml` holds them
+once, and every generator and test reads them from there (parser: `parseScale` / `checkScale` in
+`src/world/spec.ts`, pure helpers in `src/world/scale.ts`, mirror: `check_scale` in
+`tools/render_map_preview.py`, guard: `tests/scale.test.ts`).
+
+| Key | Value | Rule |
+|---|---|---|
+| `human` | 1.8 m | Tito's height; `TITO_BODY` in `src/sim/body.ts` must match |
+| `storey` | 3 m | floor-to-floor. Generated buildings are whole storeys: frontage lots draw 1–2, parcel buildings round their drawn height to whole storeys inside the district's `height` range (a range holding none is an error). Replaces `frontage_lots.level_height` |
+| `door` | [0.9, 2.1] m | a storey must fit a door |
+| `lane` | [3.0, 3.75] m | each `traffic` kind and every `street_styles.hierarchy` class (and any route with its own `width`) holds a whole number of lanes |
+| `sidewalk_min` | 1.5 m | a sidewalk is 0 (none) or at least this wide |
+
 ## Geographic rule we keep on purpose
 
 The canal's **Atlantic end lies west of its Pacific end** — true in reality, and preserved here

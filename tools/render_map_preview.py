@@ -1038,14 +1038,77 @@ def check_procedural(w):
     return errs
 
 
+SCALE_KEYS = {"human", "storey", "door", "lane", "sidewalk_min", "traffic"}
+
+
+def check_scale(w):
+    """Mirror of parseScale / checkScale in src/world/spec.ts (human scale, README "Human scale")."""
+    errs = []
+    sc = w.get("scale")
+    if not isinstance(sc, dict):
+        return ["scale: expected a mapping"]
+    for k in sorted(set(sc) - SCALE_KEYS):
+        errs.append(f"scale.{k}: unknown key (allowed: {', '.join(sorted(SCALE_KEYS))})")
+    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    for k in ("human", "storey", "sidewalk_min"):
+        if not (num(sc.get(k)) and sc[k] > 0):
+            errs.append(f"scale.{k}: must be a number > 0")
+    door, lane = sc.get("door"), sc.get("lane")
+    if not (isinstance(door, list) and len(door) == 2 and all(num(v) and v > 0 for v in door)):
+        errs.append("scale.door: [width, height] must be > 0")
+    elif num(sc.get("storey")) and sc["storey"] < door[1]:
+        errs.append(f"scale.storey: {sc['storey']} m does not fit a {door[1]} m door (scale.door)")
+    if not (isinstance(lane, list) and len(lane) == 2 and all(num(v) for v in lane) and 0 < lane[0] <= lane[1]):
+        errs.append("scale.lane: expected [min, max] with 0 < min <= max")
+    traffic = sc.get("traffic")
+    if not (isinstance(traffic, list) and all(isinstance(k, str) for k in traffic)):
+        errs.append("scale.traffic: expected a list of street_profiles kinds")
+        traffic = []
+    for k in traffic:
+        if k not in w["street_profiles"]:
+            errs.append(f'scale.traffic: unknown street_profiles kind "{k}"')
+    if errs:
+        return errs
+    storey, smin = sc["storey"], sc["sidewalk_min"]
+
+    def whole_lanes(width):
+        if not width > 0:
+            return None
+        n = max(1, math.ceil(width / lane[1] - 1e-9))
+        return n if n * lane[0] <= width + 1e-9 else None
+
+    def street(path, width, sidewalk):
+        if whole_lanes(width) is None:
+            errs.append(f"{path}.width: {width} m is not a whole number of {lane[0]}–{lane[1]} m lanes (scale.lane)")
+        if sidewalk != 0 and not sidewalk >= smin:
+            errs.append(f"{path}.sidewalk: {sidewalk} m must be 0 or at least {smin} m (scale.sidewalk_min)")
+
+    for k in traffic:
+        p = w["street_profiles"][k]
+        street(f"street_profiles.{k}", p["width"], p["sidewalk"])
+    for cls, p in ((w.get("street_styles") or {}).get("hierarchy") or {}).items():
+        street(f"street_styles.hierarchy.{cls}", p["width"], p["sidewalk"])
+    for rid, r in w["routes"].items():
+        if "width" in r and r["kind"] in traffic:
+            street(f"routes.{rid}", r["width"], 0)
+    for did, b in w["blockout"]["districts"].items():
+        lo, hi = b["height"]
+        if max(1, math.ceil(lo / storey - 1e-9)) > math.floor(hi / storey + 1e-9):
+            errs.append(f"blockout.districts.{did}.height: [{lo}, {hi}] holds no whole {storey} m storey (scale.storey)")
+        fl = b.get("frontage_lots") or {}
+        if "level_height" in fl:
+            errs.append(f"blockout.districts.{did}.frontage_lots.level_height: removed, storeys come from scale.storey")
+    return errs
+
+
 if __name__ == "__main__":
     w = yaml.safe_load(WORLD.read_text())
     metrics = yaml.safe_load(METRICS.read_text()) if METRICS.exists() else None
-    errs = check(w) + check_streets(w, metrics) + check_layers(w) + check_procedural(w)
+    errs = check(w) + check_streets(w, metrics) + check_layers(w) + check_procedural(w) + check_scale(w)
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "specs/map/preview.svg"
     out.write_text(render(w))
     print(f"wrote {out}")
     if errs:
         print("\n".join(errs))
         sys.exit(1)
-    print("OK: areas, landmark cells, coastline, character refs, active area, blockout, street profiles, population, street styles, reference sectors, street metrics, layers 1-5 (land cover, relief ridges, rivers, canal, water bodies, airports, main roads), procedural inputs consistent")
+    print("OK: areas, landmark cells, coastline, character refs, active area, blockout, street profiles, population, street styles, reference sectors, street metrics, layers 1-5 (land cover, relief ridges, rivers, canal, water bodies, airports, main roads), procedural inputs, human scale consistent")

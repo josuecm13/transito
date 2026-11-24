@@ -58,7 +58,7 @@ test('spec: a broken frontage_lots block reports its problems', () => {
   broken(/side_gap:\s+{ median: 0\.0,\s+iqr: 0\.0 }/, 'side_gap: { median: -1, iqr: 0.0 }');
   broken(/two_storey_share: 0\.3/, 'two_storey_share: 1.5');
   broken(/^ {6}method: frontage-lots/m, '      method: lots');
-  broken(/level_height: 3/, 'level_height: 0');
+  broken(/two_storey_share: 0\.3 /, 'two_storey_share: 0.3\n        level_height: 3\n       '); // storeys come from scale.storey
   const noBlock = yaml.replace(/ {6}frontage_lots:\n( {8}.*\n)+/, '');
   assert.notEqual(noBlock, yaml);
   assert.throws(() => parseWorldSpec(noBlock), WorldSpecError, 'frontage-lots without its block');
@@ -91,7 +91,7 @@ test('corridor: buildings come from frontage lots (no parcels in the district), 
   assert.ok(lots.every((b) => b.district === DISTRICT));
   assert.ok(city.parcels.every((p) => p.district !== DISTRICT));
   assert.ok(city.buildings.filter((b) => b.parcel >= 0).every((b) => b.district !== DISTRICT));
-  // Heights are whole storeys of the spec's level height.
+  // Heights are whole storeys of scale.storey (levelHeight is filled from it).
   for (const b of lots) assert.ok(b.height === fl.levelHeight || b.height === 2 * fl.levelHeight, `height ${b.height}`);
 });
 

@@ -21,6 +21,7 @@ import type { Vec2 } from '../vec.ts';
 import type { Rng } from '../rng.ts';
 import type { Building } from '../blockout.ts';
 import { buildingCorners } from '../blockout.ts';
+import { wholeStoreyHeight } from '../scale.ts';
 import type { Parcel } from './parcels.ts';
 import { pointInPolygon } from '../geometry.ts';
 import { distToSegment, ringCentroid, ringInsidePoly } from './poly.ts';
@@ -92,7 +93,8 @@ export function placeBuildings(spec: WorldSpec, parcels: readonly Parcel[], land
     const fillRoll = rng.next();
     const width = rng.range(cfg.footprint[0], cfg.footprint[1]);
     const depth = rng.range(cfg.footprint[0], cfg.footprint[1]);
-    const height = rng.range(cfg.height[0], cfg.height[1]);
+    // Drawn as before (same RNG sequence), then rounded to whole storeys of scale.storey inside the range.
+    const height = wholeStoreyHeight(rng.range(cfg.height[0], cfg.height[1]), cfg.height, spec.scale.storey);
     if (fillRoll >= cfg.fill) continue;
     const fit = fitBuilding(p, cfg, { width, depth });
     if (!fit) continue;

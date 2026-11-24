@@ -169,6 +169,16 @@ street_profiles:
   waterway: { width: 120, sidewalk: 0 }
   runway:   { width: 45, sidewalk: 0 }
 
+# Human scale: one fixed set of measures every generator and test reads (README "Human scale").
+# Horizontal distances are compressed (README "Compression"); these human-sized measures are not.
+scale:
+  human: 1.8              # m, Tito's height (src/sim/body.ts TITO_BODY must match)
+  storey: 3               # m floor-to-floor; generated building heights are whole storeys
+  door: [0.9, 2.1]        # m, [width, height] of a street door; a storey must fit one
+  lane: [3.0, 3.75]       # m, [min, max] width of one traffic lane; traffic carriageways hold whole lanes
+  sidewalk_min: 1.5       # m, a sidewalk is 0 (none) or at least this wide
+  traffic: [highway, arterial, road]   # street_profiles kinds with lanes (every street_styles.hierarchy class has them too)
+
 # Generated street network (issue #7). See "Streets" in README.md.
 # Avenues are the hand-drawn `routes` (arterial/highway): the generator treats them as fixed
 # constraints and never moves them. Everything below describes the streets it GENERATES between
@@ -272,7 +282,6 @@ blockout:
         side_gap:      { median: 0.0,  iqr: 0.0 }   # m between neighbours: continuous rows
         coverage: 0.98          # 0–1, share of the frontage covered by buildings (outcome measured on La Carpio; the realism test target)
         two_storey_share: 0.3   # 0–1, share of 2-storey houses among 1/2-storey (engine default; no levels tagged)
-        level_height: 3         # m per storey (engine default)
         jitter: { rotation: 8, offset: 1 }   # deg ± / m ± (along, inward): the engine's informal-settlement jitter
     airport:        { lot: 70, footprint: [20, 45], height: [6, 14],  setback: 15, fill: 0.2,  angle: 0 }
     costa-del-este: { lot: 40, footprint: [14, 24], height: [20, 60], setback: 8,  fill: 0.5,  angle: -8 }

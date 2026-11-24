@@ -1,6 +1,8 @@
 import { load } from 'js-yaml';
 import type { Vec2 } from './vec.ts';
 import { pointInPolygon } from './geometry.ts';
+import type { ScaleSpec } from './scale.ts';
+import { storeyRange, streetScaleProblems } from './scale.ts';
 import type { AirportParams } from './proc/airport.ts';
 import type { CoverParams } from './proc/cover.ts';
 import type { LakeParams } from './proc/lake.ts';
@@ -86,7 +88,7 @@ export interface FrontageLots {
   coverage: number;
   /** Share of 2-storey buildings among 1- and 2-storey ones (0–1). */
   twoStoreyShare: number;
-  /** m per storey. */
+  /** m per storey: always `scale.storey` (one source; the yaml block has no level_height). */
   levelHeight: number;
   /** Informal-settlement jitter: rotation ± degrees, offset ± metres (along / inward). */
   jitter: { rotation: number; offset: number };
@@ -222,6 +224,8 @@ export interface WorldSpec {
   mainRoads: MainRoadsSpec;
   /** Procedural isthmus inputs (procedural:), read by src/world/proc/isthmus.ts. */
   procedural: ProceduralSpec;
+  /** Human scale (scale:): storey, door, lane, sidewalk, Tito's height. See src/world/scale.ts. */
+  scale: ScaleSpec;
 }
 
 /** Reserved stop id in procedural roads / transit: the generated airport's terminal. */
@@ -370,16 +374,17 @@ function parseSpread(r: Reader, v: unknown, path: string, minMedian: number): Sp
   return { median, iqr };
 }
 
-function parseFrontageLots(r: Reader, v: unknown, path: string): FrontageLots | undefined {
+const FRONTAGE_LOTS_KEYS = ['width', 'depth', 'front_setback', 'side_gap', 'coverage', 'two_storey_share', 'jitter'] as const;
+
+function parseFrontageLots(r: Reader, v: unknown, path: string, storey: number): FrontageLots | undefined {
   const o = r.obj(v, path);
   if (!o) return undefined;
+  r.exact(o, FRONTAGE_LOTS_KEYS, path);
   const unit = (key: string): number => {
     const x = r.num(o, key, path);
     if (!(x >= 0 && x <= 1)) r.problems.push(`${path}.${key}: must be in [0, 1]`);
     return x;
   };
-  const levelHeight = r.num(o, 'level_height', path);
-  if (!(levelHeight > 0)) r.problems.push(`${path}.level_height: must be > 0`);
   const jr = r.obj(o.jitter, `${path}.jitter`);
   const jitter = { rotation: jr ? r.num(jr, 'rotation', `${path}.jitter`) : NaN, offset: jr ? r.num(jr, 'offset', `${path}.jitter`) : NaN };
   if (jitter.rotation < 0 || jitter.offset < 0) r.problems.push(`${path}.jitter: rotation and offset must be >= 0`);
@@ -390,7 +395,7 @@ function parseFrontageLots(r: Reader, v: unknown, path: string): FrontageLots | 
     sideGap: parseSpread(r, o.side_gap, `${path}.side_gap`, 0),
     coverage: unit('coverage'),
     twoStoreyShare: unit('two_storey_share'),
-    levelHeight,
+    levelHeight: storey,
     jitter,
   };
 }
@@ -566,6 +571,8 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
     }
   }
 
+  const scale = parseScale(r, doc.scale, streetProfiles);
+
   const boRaw = r.obj(doc.blockout, 'blockout');
   const blockout: Blockout = { seed: NaN, landmarkClearance: NaN, districts: {} };
   if (boRaw) {
@@ -589,7 +596,7 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
           angle: r.num(o, 'angle', path),
           method: method === 'frontage-lots' ? 'frontage-lots' : 'parcels',
         };
-        if (method === 'frontage-lots') district.frontageLots = parseFrontageLots(r, o.frontage_lots, `${path}.frontage_lots`);
+        if (method === 'frontage-lots') district.frontageLots = parseFrontageLots(r, o.frontage_lots, `${path}.frontage_lots`, scale.storey);
         else if (o.frontage_lots !== undefined) r.problems.push(`${path}.frontage_lots: only valid with method "frontage-lots"`);
         blockout.districts[id] = district;
       }
@@ -597,6 +604,7 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
   }
 
   const streetStyles = parseStreetStyles(r, doc.street_styles, districts, grid, bounds, activeArea);
+  checkScale(r, scale, streetProfiles, streetStyles, routes, blockout);
   const relief = parseRelief(r, doc.relief, bounds);
 
   const popRaw = r.obj(doc.population, 'population');
@@ -657,7 +665,68 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
     airports,
     mainRoads,
     procedural,
+    scale,
   };
+}
+
+const SCALE_KEYS = ['human', 'storey', 'door', 'lane', 'sidewalk_min', 'traffic'] as const;
+
+/** scale: (strict keys). Cross-checks against streets and buildings run later, in checkScale. */
+function parseScale(r: Reader, raw: unknown, streetProfiles: Record<string, StreetProfile>): ScaleSpec {
+  const out: ScaleSpec = { human: NaN, storey: NaN, door: { width: NaN, height: NaN }, lane: [NaN, NaN], sidewalkMin: NaN, traffic: [] };
+  const o = r.obj(raw, 'scale');
+  if (!o) return out;
+  r.exact(o, SCALE_KEYS, 'scale');
+  const pos = (key: string): number => {
+    const v = r.num(o, key, 'scale');
+    if (isNum(v) && !(v > 0)) r.problems.push(`scale.${key}: must be > 0`);
+    return v;
+  };
+  out.human = pos('human');
+  out.storey = pos('storey');
+  out.sidewalkMin = pos('sidewalk_min');
+  const [dw, dh] = r.pair(o.door, 'scale.door');
+  out.door = { width: dw, height: dh };
+  if (!(dw > 0 && dh > 0)) r.problems.push('scale.door: [width, height] must be > 0');
+  else if (isNum(out.storey) && !(out.storey >= dh)) r.problems.push(`scale.storey: ${out.storey} m does not fit a ${dh} m door (scale.door)`);
+  out.lane = r.pair(o.lane, 'scale.lane');
+  if (!(out.lane[0] > 0 && out.lane[1] >= out.lane[0])) r.problems.push('scale.lane: expected [min, max] with 0 < min <= max');
+  if (!Array.isArray(o.traffic) || o.traffic.some((k) => typeof k !== 'string')) {
+    r.problems.push('scale.traffic: expected a list of street_profiles kinds');
+  } else {
+    out.traffic = o.traffic as string[];
+    for (const k of out.traffic) if (!(k in streetProfiles)) r.problems.push(`scale.traffic: unknown street_profiles kind "${k}"`);
+  }
+  return out;
+}
+
+/** Streets and buildings against scale: (skipped when scale: itself is broken; its own problems are already reported). */
+function checkScale(
+  r: Reader,
+  scale: ScaleSpec,
+  streetProfiles: Record<string, StreetProfile>,
+  streetStyles: StreetStyles,
+  routes: Route[],
+  blockout: Blockout,
+): void {
+  if (![scale.storey, scale.sidewalkMin, scale.lane[0], scale.lane[1]].every(isNum)) return;
+  for (const k of scale.traffic) {
+    const p = streetProfiles[k];
+    if (p) r.problems.push(...streetScaleProblems(`street_profiles.${k}`, p, scale));
+  }
+  for (const [cls, p] of Object.entries(streetStyles.hierarchy)) {
+    if (isNum(p.width)) r.problems.push(...streetScaleProblems(`street_styles.hierarchy.${cls}`, p, scale));
+  }
+  for (const route of routes) {
+    if (route.width !== undefined && scale.traffic.includes(route.kind)) {
+      r.problems.push(...streetScaleProblems(`routes.${route.id}`, { width: route.width, sidewalk: 0 }, scale));
+    }
+  }
+  for (const [id, d] of Object.entries(blockout.districts)) {
+    if (isNum(d.height[0]) && !storeyRange(d.height, scale.storey)) {
+      r.problems.push(`blockout.districts.${id}.height: [${d.height[0]}, ${d.height[1]}] holds no whole ${scale.storey} m storey (scale.storey)`);
+    }
+  }
 }
 
 function parseSector(r: Reader, raw: unknown, path: string): ReferenceSector | undefined {
