@@ -126,3 +126,9 @@ Out of scope: compressed heights outside the active area (card E), `generateIsth
 - redone (F3): the inherited walk-graph diagnosis said the highway bends at node 11; a 3-line probe showed it is straight and the miter lands on a second local (313). The fix still went where the director said (walk-graph, corner on the sidewalk arm), and fixing it exposed a second bug the first hid (kerb-cut origin).
 - cost (F4): the "beige box" looked like a cover bug; one probe over `buildWorldData` (`/tmp/transito-orch/blocks.ts`) showed 582 ha of wild faces painted as blocks. Probing the data took 1 run; guessing in render code would have taken several. No `failures.log` lines this session: the orchestrator arrived as pasted text, so its PostToolUseFailure hook never loaded.
 - rule: after a pipeline switch (authored → procedural), probe every value still taken from the authored spec (labels, block faces, landmarks) on the views the director opens before calling a card done.
+
+## Follow-up (director said "todo")
+- F committed as be4ad0f (package.json and src/main.ts left out).
+- T1 filed as josuecm13/transito#14 (tito-home anchor on the Interamericana carriageway).
+- Spec cleanup: land_cover, rivers, water_bodies, airports, main_roads removed from world.yaml, spec.ts (parse + types), render_map_preview.py (checks + drawing), tests/spec.test.ts, README. Canal and relief stay. preview.svg lost 59 lines. tsc 0, validator 0 (canal guards fire: lake_level and chamber mutations), build 0, suite 55/55 files.
+- Open from the director's screenshot at Tito (4330, 1663): ground looks flat brown and, at a cliff edge on the right, the sea shows underneath. Not investigated yet (capture was declined). Suspect: seam between the baked land layer and the far ground.

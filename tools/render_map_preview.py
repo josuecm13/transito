@@ -158,7 +158,7 @@ def sample_polyline(pts, step):
 
 
 def check_layers(w):
-    """Layers 1-5 sections: land_cover, rivers, canal, water_bodies, airports, main_roads, relief ridges."""
+    """Canal and relief sections (the other layer sections were retired with the authored generators, #12 2.5 F5)."""
     errs = []
     land = w["geometry"]["land"]
     W, H = w["bounds"]["width"], w["bounds"]["height"]
@@ -168,30 +168,6 @@ def check_layers(w):
 
     def inb(p):
         return 0 <= p[0] <= W and 0 <= p[1] <= H
-
-    # --- water bodies: inside land, inlets attached to a lake ---
-    bodies = {}
-    for i, b in enumerate(w.get("water_bodies") or []):
-        p = f"water_bodies[{i}]"
-        poly = b["polygon"]
-        for j, (x, y) in enumerate(poly):
-            if not point_in_poly(x, y, land):
-                errs.append(f"{p} ({b['id']}): polygon point {j} ({x},{y}) is not inside geometry.land")
-        for a, c in zip(poly, poly[1:] + poly[:1]):
-            bad = next(((x, y) for x, y in sample_polyline([a, c], 50) if not point_in_poly(x, y, land)), None)
-            if bad:
-                errs.append(f"{p} ({b['id']}): edge {a}->{c} leaves geometry.land at ({bad[0]:.0f},{bad[1]:.0f})")
-                break
-        if b["kind"] == "inlet":
-            lake = bodies.get(b.get("of"))
-            if not lake or lake["kind"] != "lake":
-                errs.append(f"{p} ({b['id']}): inlet 'of' must name an earlier lake")
-            elif not any(point_in_poly(x, y, lake["polygon"]) for x, y in poly):
-                errs.append(f"{p} ({b['id']}): inlet does not touch its lake '{b['of']}'")
-        bodies[b["id"]] = b
-
-    def in_water_body(x, y):
-        return any(point_in_poly(x, y, b["polygon"]) for b in bodies.values())
 
     # --- canal: centreline on land between its mouths, locks and bridges on the channel ---
     canal = w.get("canal") or {}
@@ -228,17 +204,8 @@ def check_layers(w):
                 elif dist_polyline(lm["x"], lm["y"], cl) > half:
                     errs.append(f"canal.bridge_landmarks: {bl} is {dist_polyline(lm['x'], lm['y'], cl):.0f} m from the canal "
                                 f"centreline, outside the {half:g} m half-width (not on the channel)")
-            lake = next((b for b in bodies.values() if b["kind"] == "lake"), None)
-            if lake and not any(point_in_poly(x, y, lake["polygon"]) for x, y in sample_polyline(cl, 25)):
-                errs.append("canal: no part of the centreline is inside the lake (lake does not touch the channel)")
             if not canal["lake_level"] > canal["sea_level"]:
                 errs.append("canal: lake_level must be above sea_level")
-
-    def in_canal(x, y):
-        return cl is not None and dist_polyline(x, y, cl) <= canal["width"] / 2
-
-    def wet(x, y):
-        return not point_in_poly(x, y, land) or in_water_body(x, y) or in_canal(x, y)
 
     # --- relief ridges and far grid ---
     ids = set()
@@ -251,236 +218,12 @@ def check_layers(w):
         for x, y in rd["points"]:
             if not point_in_poly(x, y, land):
                 errs.append(f"relief.ridges {rd['id']}: crest point ({x},{y}) is in the sea")
-            elif in_water_body(x, y):
-                errs.append(f"relief.ridges {rd['id']}: crest point ({x},{y}) is inside a water body")
     far = w["relief"]["grid"].get("far")
     if not far or not far["cell"] > w["relief"]["grid"]["cell"]:
         errs.append("relief.grid.far.cell must exist and be coarser than relief.grid.cell")
     elif W % far["cell"] or H % far["cell"]:
         errs.append(f"relief.grid.far.cell {far['cell']} must divide the map size {W} x {H}")
 
-    # --- rivers: mouths on the coast, guides on dry land ---
-    rv = w.get("rivers") or {}
-    flat = {z["id"]: z for z in w["relief"]["flatten"]}
-    airport_zones = [flat[a["flatten"]] for a in (w.get("airports") or []) if a["flatten"] in flat]
-    for it in rv.get("items", []):
-        x, y = it["mouth"]
-        ot = it.get("outlet")
-        if ot:
-            body = bodies.get(ot.get("water_body"))
-            if not body or body["kind"] != "lake":
-                errs.append(f"river {it['id']}: outlet.water_body '{ot.get('water_body')}' is not a lake in water_bodies")
-            else:
-                poly = body["polygon"]
-                d = min(dist_polyline(x, y, [a, c]) for a, c in zip(poly, poly[1:] + poly[:1]))
-                if d > rv["mouth_tolerance"]:
-                    errs.append(f"river {it['id']}: mouth ({x},{y}) is {d:.0f} m from the shore of lake '{ot['water_body']}' "
-                                f"(max {rv['mouth_tolerance']} m): a lake-fed mouth must be a shoreline point of its water body")
-        else:
-            d = dist_coast(x, y, edges)
-            if d > rv["mouth_tolerance"]:
-                errs.append(f"river {it['id']}: mouth ({x},{y}) is {d:.0f} m from the coast (max {rv['mouth_tolerance']} m): "
-                            "a mouth must be a shoreline point of geometry.land")
-        for gx, gy in it.get("guide", []):
-            if not point_in_poly(gx, gy, land) or in_water_body(gx, gy):
-                errs.append(f"river {it['id']}: guide point ({gx},{gy}) must be on dry land")
-        for z in airport_zones:
-            (x0, y0), (x1, y1) = z["rect"]
-            if x0 <= x <= x1 and y0 <= y <= y1:
-                errs.append(f"river {it['id']}: mouth lies in airport flatten zone {z['id']}")
-
-    # --- land cover: tidal shores, settlements, planned shares ---
-    lc = w.get("land_cover") or {}
-    shores = {s_["id"]: s_ for s_ in lc.get("tidal_shores", [])}
-    for sid in lc.get("mangrove", {}).get("shores", []):
-        if sid not in shores:
-            errs.append(f"land_cover.mangrove.shores: '{sid}' is not in tidal_shores")
-    for sh in shores.values():
-        (x0, y0), (x1, y1) = sh["rect"]
-        if not (x0 < x1 and y0 < y1):
-            errs.append(f"land_cover.tidal_shores {sh['id']}: rect min must be south-west of max")
-        elif not any(x0 <= x <= x1 and y0 <= y <= y1 for x, y in land if 0 < x < W):
-            errs.append(f"land_cover.tidal_shores {sh['id']}: rect contains no coastline vertex")
-    for st in lc.get("settlements", []):
-        if not point_in_poly(st["at"][0], st["at"][1], land):
-            errs.append(f"land_cover.settlements {st['id']}: centre is in the sea")
-    if lc:
-        step, band = 100, lc["mangrove"]["band"]
-        mangrove_rects = [shores[sid]["rect"] for sid in lc["mangrove"]["shores"] if sid in shores]
-        tot = urb = wetl = 0
-        for i in range(W // step):
-            for j in range(H // step):
-                x, y = i * step + step / 2, j * step + step / 2
-                if not point_in_poly(x, y, land):
-                    continue
-                tot += 1
-                if any(math.hypot(x - s_["at"][0], y - s_["at"][1]) <= s_["radius"] for s_ in lc["settlements"]):
-                    urb += 1
-                if any(r[0][0] <= x <= r[1][0] and r[0][1] <= y <= r[1][1] for r in mangrove_rects) \
-                        and dist_coast(x, y, edges) <= band:
-                    wetl += 1
-        for name, got in (("urban", urb / tot), ("wetland", wetl / tot)):
-            lo, hi = lc["shares"][name]
-            if not lo <= got <= hi:
-                errs.append(f"land_cover.shares.{name}: planned share {got:.3f} of land is outside [{lo}, {hi}]")
-
-    # --- airports ---
-    for ap in w.get("airports") or []:
-        p = f"airports {ap['id']}"
-        rws = []
-        for rid in ap["runways"]:
-            r = routes.get(rid)
-            if not r or r["kind"] != "runway":
-                errs.append(f"{p}: runway '{rid}' is not a routes entry of kind runway")
-                continue
-            rws.append(r)
-            (ax, ay), (bx, by) = r["points"][0], r["points"][-1]
-            length = math.hypot(bx - ax, by - ay)
-            if abs(length - ap["runway_length"]) > 1:
-                errs.append(f"{p}: runway {rid} is {length:.0f} m, airports.runway_length says {ap['runway_length']}")
-            bad = next(((x, y) for x, y in sample_polyline(r["points"], 50) if wet(x, y)), None)
-            if bad:
-                errs.append(f"{p}: runway {rid} is not on dry land at ({bad[0]:.0f},{bad[1]:.0f})")
-        if len(rws) == 2:
-            (ax, ay), (bx, by) = rws[0]["points"][0], rws[0]["points"][-1]
-            (cx, cy) = rws[1]["points"][0]
-            sp = abs((bx - ax) * (ay - cy) - (ax - cx) * (by - ay)) / math.hypot(bx - ax, by - ay)   # perpendicular distance
-            if abs(sp - ap["runway_spacing"]) > 1:
-                errs.append(f"{p}: runway centrelines are {sp:.0f} m apart, airports.runway_spacing says {ap['runway_spacing']}")
-        for k in ("terminal", "cargo"):
-            lm = lms.get(ap[k])
-            if not lm:
-                errs.append(f"{p}: {k} landmark '{ap[k]}' does not exist")
-            elif not point_in_poly(lm["x"], lm["y"], land):
-                errs.append(f"{p}: {k} landmark '{ap[k]}' is in the sea")
-        fl = flat.get(ap["flatten"])
-        if not fl:
-            errs.append(f"{p}: flatten '{ap['flatten']}' is not a relief.flatten id")
-        else:
-            (x0, y0), (x1, y1) = fl["rect"]
-            for r in rws:
-                for x, y in r["points"]:
-                    if not (x0 <= x <= x1 and y0 <= y <= y1):
-                        errs.append(f"{p}: runway point ({x},{y}) is outside flatten zone {fl['id']}")
-
-    # --- hand-drawn routes (anything but waterway) stay out of water bodies ---
-    for name, r in routes.items():
-        if r["kind"] == "waterway":
-            continue
-        bad = next(((x, y) for x, y in sample_polyline(r["points"], 100) if in_water_body(x, y)), None)
-        if bad:
-            errs.append(f"route {name}: runs through a water body at ({bad[0]:.0f},{bad[1]:.0f})")
-
-    # --- main roads ---
-    mr = w.get("main_roads") or {}
-    if mr:
-        prm = mr["params"]
-        step = prm["sample_step"]
-        nodes = {}
-        for n in mr["nodes"]:
-            if n["id"] in nodes:
-                errs.append(f"main_roads.nodes: duplicate id {n['id']}")
-            nodes[n["id"]] = n
-            if not inb(n["at"]):
-                errs.append(f"main_roads node {n['id']}: {n['at']} is out of bounds")
-            if "landmark" in n:
-                lm = lms.get(n["landmark"])
-                if not lm:
-                    errs.append(f"main_roads node {n['id']}: landmark '{n['landmark']}' does not exist")
-                elif [lm["x"], lm["y"]] != list(n["at"]):
-                    errs.append(f"main_roads node {n['id']}: at {n['at']} differs from landmark {n['landmark']} ({lm['x']},{lm['y']})")
-        used, road_ids = set(), set()
-        for rd in mr["roads"]:
-            p = f"main_roads road {rd['id']}"
-            if rd["id"] in road_ids:
-                errs.append(f"main_roads.roads: duplicate id {rd['id']}")
-            road_ids.add(rd["id"])
-            if rd["class"] not in prm["max_grade"]:
-                errs.append(f"{p}: class '{rd['class']}' has no params.max_grade entry")
-            if rd["class"] not in w["street_profiles"]:
-                errs.append(f"{p}: class '{rd['class']}' has no street_profiles entry")
-            for sup in rd.get("supersedes", []):
-                if sup not in routes:
-                    errs.append(f"{p}: supersedes unknown route '{sup}'")
-            missing = [n for n in rd["chain"] if n not in nodes]
-            if missing:
-                errs.append(f"{p}: chain names unknown node(s) {', '.join(missing)}")
-                continue
-            used.update(rd["chain"])
-            viaduct = rd.get("structure") == "viaduct"
-            bridges = rd.get("bridges", [])
-            for br in bridges:
-                bx, by = br["at"]
-                if br["over"] == "canal":
-                    if not in_canal(bx, by):
-                        errs.append(f"{p}: bridge {br['id']} at {br['at']} is not over the canal channel")
-                elif br["over"] in bodies:
-                    if not point_in_poly(bx, by, bodies[br["over"]]["polygon"]):
-                        errs.append(f"{p}: bridge {br['id']} at {br['at']} is not over {br['over']}")
-                else:
-                    errs.append(f"{p}: bridge {br['id']} is over '{br['over']}', not canal or a water body id")
-                if "landmark" in br:
-                    lm = lms.get(br["landmark"])
-                    if not lm or math.hypot(lm["x"] - bx, lm["y"] - by) > br["span"]:
-                        errs.append(f"{p}: bridge {br['id']} is more than its span from landmark {br['landmark']}")
-
-            def bridged(x, y, bridges=bridges):
-                return any(math.hypot(x - b["at"][0], y - b["at"][1]) <= b["span"] / 2 for b in bridges)
-
-            pts = [nodes[n]["at"] for n in rd["chain"]]
-            for n in rd["chain"]:
-                x, y = nodes[n]["at"]
-                if wet(x, y) and not viaduct and not bridged(x, y):
-                    errs.append(f"{p}: node {n} ({x},{y}) is over water but the road declares no bridge or viaduct there")
-            landfalls = [nodes[n]["at"] for n in rd["chain"] if nodes[n]["kind"] == "landfall"]
-
-            def near_landfall(x, y, landfalls=landfalls):
-                return any(math.hypot(x - lx, y - ly) <= 250 for lx, ly in landfalls)
-
-            if viaduct:
-                lo, hi = prm["viaduct"]["offset"]
-                for x, y in sample_polyline(pts, step):
-                    if near_landfall(x, y):
-                        continue
-                    if point_in_poly(x, y, land):
-                        errs.append(f"{p}: viaduct is over land at ({x:.0f},{y:.0f}), away from its landfalls")
-                        break
-                    d = dist_coast(x, y, edges)
-                    if not lo <= d <= hi:
-                        errs.append(f"{p}: viaduct at ({x:.0f},{y:.0f}) is {d:.0f} m from the shore, outside the {lo}-{hi} m band")
-                        break
-            else:
-                bad = next(((x, y) for x, y in sample_polyline(pts, step) if wet(x, y) and not bridged(x, y)), None)
-                if bad:
-                    errs.append(f"{p}: crosses water at ({bad[0]:.0f},{bad[1]:.0f}) with no declared bridge covering it")
-        for nid in nodes:
-            if nid not in used:
-                errs.append(f"main_roads node {nid}: used by no road")
-        co = mr.get("coastway")
-        if co:
-            if co["boulevard"] not in road_ids:
-                errs.append(f"main_roads.coastway.boulevard: '{co['boulevard']}' is not a road")
-            vi = co["viaduct"]
-            vr = next((r for r in mr["roads"] if r["id"] == vi["road"]), None)
-            around = lms.get(vi["around"])
-            if not vr or vr.get("structure") != "viaduct":
-                errs.append(f"main_roads.coastway.viaduct.road: '{vi['road']}' is not a road with structure: viaduct")
-            elif not around:
-                errs.append(f"main_roads.coastway.viaduct.around: landmark '{vi['around']}' does not exist")
-            else:
-                for n in vr["chain"]:
-                    if nodes[n]["kind"] != "landfall" and nodes[n]["at"][0] <= around["x"]:
-                        errs.append(f"main_roads.coastway.viaduct: node {n} is not on the bay (east) side of {vi['around']}")
-            poly = co["strip"]["polygon"]
-            for x, y in poly:
-                if not point_in_poly(x, y, land):
-                    errs.append(f"main_roads.coastway.strip: point ({x},{y}) is not on land")
-            for a, c in zip(poly, poly[1:] + poly[:1]):
-                if any(not point_in_poly(x, y, land) for x, y in sample_polyline([a, c], 25)):
-                    errs.append(f"main_roads.coastway.strip: edge {a}->{c} leaves the land")
-                    break
-            if co["strip"]["kind"] not in (lc.get("classes") or []):
-                errs.append(f"main_roads.coastway.strip.kind '{co['strip']['kind']}' is not a land_cover class")
     return errs
 
 
@@ -706,22 +449,13 @@ def check_streets(w, metrics):
 
 
 def render_layers(w, s, pts):
-    """SVG for layers 1-5: land-cover discs and tidal shores, ridges, lake, canal channel, rivers, airports, main roads."""
+    """SVG for the relief ridges and the canal channel with its locks."""
     H = w["bounds"]["height"]
     out = ['<g id="layers-1-5">']
     xy = lambda p: (p[0] * s, (H - p[1]) * s)
-    lc = w.get("land_cover") or {}
-    for st in lc.get("settlements", []):
-        cx, cy = xy(st["at"])
-        out.append(f'<circle cx="{cx:.0f}" cy="{cy:.0f}" r="{st["radius"]*s:.0f}" fill="#c0392b" fill-opacity="0.12" stroke="#c0392b" stroke-width="1" stroke-dasharray="3 3"/>')
-    for sh in lc.get("tidal_shores", []):
-        (x0, y0), (x1, y1) = sh["rect"]
-        out.append(f'<rect x="{x0*s:.0f}" y="{(H-y1)*s:.0f}" width="{(x1-x0)*s:.0f}" height="{(y1-y0)*s:.0f}" fill="#2f6b4f" fill-opacity="0.15" stroke="#2f6b4f" stroke-width="1" stroke-dasharray="2 3"/>')
     for rd in (w["relief"].get("ridges") or []):
         out.append(f'<polyline points="{pts(rd["points"])}" fill="none" stroke="#7a5230" stroke-width="{max(2, rd["width"]*2*s/3):.0f}" stroke-opacity="0.35" stroke-linecap="round"/>'
                    f'<polyline points="{pts(rd["points"])}" fill="none" stroke="#7a5230" stroke-width="1.5" stroke-dasharray="6 3"/>')
-    for b in w.get("water_bodies") or []:
-        out.append(f'<polygon points="{pts(b["polygon"])}" fill="{LAKE}" stroke="#1d4a5a" stroke-width="1.5" fill-opacity="0.95"/>')
     canal = w.get("canal")
     if canal:
         cl = w["routes"][canal["route"]]["points"]
@@ -731,35 +465,6 @@ def render_layers(w, s, pts):
             cx, cy = xy((lm["x"], lm["y"]))
             out.append(f'<rect x="{cx-9:.0f}" y="{cy-4:.0f}" width="18" height="8" fill="#e9e4d8" stroke="#333" stroke-width="1"/>'
                        f'<text x="{cx+12:.0f}" y="{cy-6:.0f}" font-size="9" fill="#fff" stroke="#000" stroke-width="2" paint-order="stroke">{lk["id"]} x{lk["steps"]}</text>')
-    for it in (w.get("rivers") or {}).get("items", []):
-        line = [it["mouth"], *it.get("guide", [])]
-        out.append(f'<polyline points="{pts(line)}" fill="none" stroke="#5fb3e6" stroke-width="2" stroke-dasharray="5 3"/>')
-        cx, cy = xy(it["mouth"])
-        out.append(f'<circle cx="{cx:.0f}" cy="{cy:.0f}" r="4" fill="#5fb3e6" stroke="#fff"/>'
-                   f'<text x="{cx+6:.0f}" y="{cy-4:.0f}" font-size="9" fill="#bfe3ff" stroke="#000" stroke-width="2" paint-order="stroke">{it["id"]}</text>')
-    co = (w.get("main_roads") or {}).get("coastway")
-    if co:
-        out.append(f'<polygon points="{pts(co["strip"]["polygon"])}" fill="#7fbf6a" fill-opacity="0.8" stroke="#3d7a2e" stroke-width="1"/>')
-    mr = w.get("main_roads")
-    if mr:
-        nodes = {n["id"]: n for n in mr["nodes"]}
-        colors = {"interamericana": "#ff8c1a", "transistmica": "#e0b000", "corredor-sur": "#d7263d", "cinta-costera": "#2e9e44"}
-        for rd in mr["roads"]:
-            line = [nodes[n]["at"] for n in rd["chain"]]
-            color = colors.get(rd["id"], "#ff8c1a" if rd["class"] == "arterial" else "#e0b000")
-            dash = ' stroke-dasharray="7 4"' if rd.get("structure") == "viaduct" else ""
-            out.append(f'<polyline points="{pts(line)}" fill="none" stroke="#000" stroke-width="6" stroke-linejoin="round" stroke-opacity="0.5"/>'
-                       f'<polyline points="{pts(line)}" fill="none" stroke="{color}" stroke-width="3.5" stroke-linejoin="round"{dash}/>')
-            for br in rd.get("bridges", []):
-                cx, cy = xy(br["at"])
-                out.append(f'<circle cx="{cx:.0f}" cy="{cy:.0f}" r="{br["span"]*s/2:.0f}" fill="none" stroke="#fff" stroke-width="2"/>')
-        for n in mr["nodes"]:
-            cx, cy = xy(n["at"])
-            out.append(f'<circle cx="{cx:.0f}" cy="{cy:.0f}" r="2.5" fill="#fff" stroke="#000" stroke-width="0.8"/>')
-    for ap in w.get("airports") or []:
-        r0 = w["routes"][ap["runways"][0]]["points"][0]
-        cx, cy = xy(r0)
-        out.append(f'<text x="{cx:.0f}" y="{cy+14:.0f}" font-size="10" fill="#fff" stroke="#000" stroke-width="2.5" paint-order="stroke" text-anchor="middle">{ap["id"]} airport</text>')
     out.append("</g>")
     return out
 
@@ -1173,4 +878,4 @@ if __name__ == "__main__":
     if errs:
         print("\n".join(errs))
         sys.exit(1)
-    print("OK: areas, landmark cells, coastline, character refs, active area, blockout, street profiles, population, street styles, reference sectors, street metrics, layers 1-5 (land cover, relief ridges, rivers, canal, water bodies, airports, main roads), procedural inputs, human scale consistent")
+    print("OK: areas, landmark cells, coastline, character refs, active area, blockout, street profiles, population, street styles, reference sectors, street metrics, relief ridges and canal, procedural inputs, human scale consistent")
