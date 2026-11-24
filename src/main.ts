@@ -21,5 +21,21 @@ const ui = document.getElementById('ui') as HTMLElement;
 await createGame({
   canvas,
   ui,
-  plugins: [worldData, worldView, worldPhysics, player, vehicle, landmarkTriggers, minimap, pedestrians, cameraFollow, cameraSettings, screens, pauseMenu, worldMap, debugMode, debugHud],
+  plugins: [
+    worldData,
+    worldView,
+    worldPhysics,
+    player,
+    vehicle,
+    landmarkTriggers,
+    minimap,
+    pedestrians,
+    cameraFollow,
+    cameraSettings,
+    screens,
+    pauseMenu,
+    worldMap,
+    debugMode,
+    debugHud
+  ],
 });
