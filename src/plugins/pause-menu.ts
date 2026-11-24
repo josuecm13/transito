@@ -32,6 +32,10 @@ const CONTROLS: ReadonlyArray<readonly [string, string]> = [
   ['Zoom del minimapa', 'M'],
   ['Mapa', 'Tab'],
   ['Pausa', 'Esc'],
+  ['Modo debug (ver todo el mapa)', 'F2'],
+  ['Volar (debug)', 'WASD / Espacio / C'],
+  ['Vista general (debug)', 'O'],
+  ['Velocidad (debug)', 'Rueda'],
 ];
 
 export const pauseMenu: GamePlugin = {

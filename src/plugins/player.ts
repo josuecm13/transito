@@ -74,6 +74,10 @@ export const player: GamePlugin = {
       name: 'player-move',
       phase: 'fixed',
       run(c, { dt }) {
+        if (camera.free) {
+          moveDir = null; // debug free camera: Tito stays where he is
+          return;
+        }
         if (entity.inVehicle) {
           moveDir = null; // the vehicle plugin owns the body while Tito is inside a car
           return;

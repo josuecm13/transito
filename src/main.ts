@@ -12,6 +12,7 @@ import { minimap } from './plugins/minimap.ts';
 import { screens } from './plugins/screens.ts';
 import { pauseMenu } from './plugins/pause-menu.ts';
 import { worldMap } from './plugins/world-map.ts';
+import { debugMode } from './plugins/debug-mode.ts';
 import { debugHud } from './plugins/debug-hud.ts';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -20,5 +21,5 @@ const ui = document.getElementById('ui') as HTMLElement;
 await createGame({
   canvas,
   ui,
-  plugins: [worldData, worldView, worldPhysics, player, vehicle, landmarkTriggers, minimap, pedestrians, cameraFollow, cameraSettings, screens, pauseMenu, worldMap, debugHud],
+  plugins: [worldData, worldView, worldPhysics, player, vehicle, landmarkTriggers, minimap, pedestrians, cameraFollow, cameraSettings, screens, pauseMenu, worldMap, debugMode, debugHud],
 });

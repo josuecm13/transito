@@ -2,7 +2,7 @@ import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial } from
 import type { RigidBody, Collider } from '@dimforge/rapier3d-compat';
 import type { GamePlugin } from '../ecs/plugin.ts';
 import type { Entity } from '../ecs/entity.ts';
-import { WorldDataKey } from './keys.ts';
+import { CameraControlKey, WorldDataKey } from './keys.ts';
 import { specToScene } from '../world/coords.ts';
 import { IGNORE_GROUND_GROUPS } from '../engine/physics.ts';
 import { findParkingSpot } from '../world/parking.ts';
@@ -75,9 +75,10 @@ function buildCarMesh(): { root: Group; frontWheels: Group[] } {
 
 export const vehicle: GamePlugin = {
   name: 'vehicle',
-  dependsOn: ['world-data', 'world-physics', 'player'],
+  dependsOn: ['world-data', 'world-physics', 'player', 'camera-settings'],
   setup(ctx) {
     const data = ctx.services.get(WorldDataKey);
+    const camera = ctx.services.get(CameraControlKey);
     const { terrain } = data;
     /** Ground height at a scene point. */
     const groundAt = (x: number, z: number): number => terrain.heightAt(x, -z);
@@ -239,6 +240,10 @@ export const vehicle: GamePlugin = {
       name: 'vehicle-drive',
       phase: 'fixed',
       run(c, { dt }) {
+        if (camera.free) {
+          ePressed = false; // debug free camera: the car stays where it is
+          return;
+        }
         const p = players.first;
         if (!p) return;
         if (ePressed) {

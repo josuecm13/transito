@@ -2,13 +2,14 @@ import type { GamePlugin } from '../ecs/plugin.ts';
 import type { Screen } from '../ui/screens.ts';
 import type { MapView, Viewport, ZoomLimits } from '../sim/map-view.ts';
 import { clampCenter, clampZoom, fitBounds, pan, zoomAt } from '../sim/map-view.ts';
+import { mapClickTarget } from '../sim/debug-fly.ts';
 import type { DetailLayer } from '../ui/world-map-canvas.ts';
 import { createTitoPulse, drawWorldMap, WORLD_MAP_TITLE } from '../ui/world-map-canvas.ts';
 import { bakeIsthmusBase } from '../ui/map-base.ts';
 import { renderStaticLayer } from '../ui/minimap-layer.ts';
 import { sceneToSpec } from '../world/coords.ts';
 import type { Vec2 } from '../world/vec.ts';
-import { LandCoverKey, ScreensKey, WorldDataKey } from './keys.ts';
+import { DebugModeKey, LandCoverKey, ScreensKey, WorldDataKey } from './keys.ts';
 
 /** UI tuning, not world data. */
 const DETAIL_M_PER_PX = 1;
@@ -19,6 +20,8 @@ const BASE_M_PER_PX = 6;
 /** Keyboard pan speed in screen px/s, so world speed scales with zoom. */
 const PAN_PX_PER_S = 650;
 const KEY_ZOOM_STEP = 2;
+/** A pointer that moves less than this between press and release is a click, not a pan (px). */
+const CLICK_SLOP_PX = 4;
 /** Exponential approach rate of the keyboard zoom tween (1/s). */
 const ZOOM_EASE = 16;
 const WHEEL_ZOOM_PER_PX = 0.0015;
@@ -37,10 +40,11 @@ const ZOOM_KEYS: Record<string, number> = {
 
 export const worldMap: GamePlugin = {
   name: 'world-map',
-  dependsOn: ['screens', 'world-data', 'world-view', 'player'],
+  dependsOn: ['screens', 'world-data', 'world-view', 'player', 'debug-mode'],
   setup(ctx) {
     const screens = ctx.services.get(ScreensKey);
     const data = ctx.services.get(WorldDataKey);
+    const debug = ctx.services.get(DebugModeKey);
     const players = ctx.ecs.with('player');
     const bounds = { minX: 0, minY: 0, maxX: data.spec.bounds.width, maxY: data.spec.bounds.height };
 
@@ -191,12 +195,12 @@ export const worldMap: GamePlugin = {
         },
         { signal, passive: false },
       );
-      let drag: { id: number; x: number; y: number } | undefined;
+      let drag: { id: number; x: number; y: number; x0: number; y0: number } | undefined;
       host.addEventListener(
         'pointerdown',
         (e) => {
           if (e.button !== 0) return;
-          drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+          drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY };
           host.setPointerCapture(e.pointerId);
           host.style.cursor = 'grabbing';
         },
@@ -207,7 +211,7 @@ export const worldMap: GamePlugin = {
         (e) => {
           if (!drag || e.pointerId !== drag.id) return;
           setView(pan(view, e.clientX - drag.x, e.clientY - drag.y));
-          drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+          drag = { ...drag, x: e.clientX, y: e.clientY };
           invalidate();
         },
         { signal },
@@ -216,7 +220,19 @@ export const worldMap: GamePlugin = {
         drag = undefined;
         host.style.cursor = 'grab';
       };
-      host.addEventListener('pointerup', endDrag, { signal });
+      host.addEventListener(
+        'pointerup',
+        (e) => {
+          // Debug: a click (not a drag) teleports the free camera there and closes the map.
+          const click = drag && e.button === 0 && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < CLICK_SLOP_PX;
+          endDrag();
+          if (!click || !debug.active) return;
+          const r = canvas.getBoundingClientRect();
+          debug.teleport(mapClickTarget(view, { x: e.clientX - r.left, y: e.clientY - r.top }, vp, bounds));
+          screens.closeAll();
+        },
+        { signal },
+      );
       host.addEventListener('pointercancel', endDrag, { signal });
       host.addEventListener(
         'dblclick',

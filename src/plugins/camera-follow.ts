@@ -51,6 +51,7 @@ export const cameraFollow: GamePlugin = {
       name: 'camera-follow',
       phase: 'late',
       run(c, { dt }) {
+        if (control.free) return; // debug free camera owns the camera and the mouse
         const target = targets.first;
         const t = target?.position ?? spawn;
 
