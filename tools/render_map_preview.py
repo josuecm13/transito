@@ -859,6 +859,8 @@ PROC_SCHEMA = {
     },
     "transit": {"stops": "stops", "lines": "list", "off_urban": "pos", "off_road": "pos",
                 "grade": {"metro": "pos", "rail": "pos"}, "bridge": "pos", "interchange_radius": "pos"},
+    "act1": {"line": "str", "branch_to": "str", "anchor_at": "frac", "town": "str", "barrio_radius": "pos", "strip_half_width": "pos"},
+    "?landmarks": "landmark_rules",
 }
 ZONE = {"line": {"id": "str", "kind": "str", "points": "pts2", "width": "pos", "rate": "nonneg"},
         "disc": {"id": "str", "kind": "str", "at": "pt", "radius": "pos", "rate": "nonneg"}}
@@ -1035,6 +1037,44 @@ def check_procedural(w):
             for j, b2 in enumerate(br):
                 refs(b2, f"{p}.branches[{j}]", transit_stops)
     unique(lines, "procedural.transit.lines")
+
+    a1 = pr.get("act1")
+    if isinstance(a1, dict):
+        p = "procedural.act1"
+        if a1.get("anchor_at") in (0, 1):
+            errs.append(f"{p}.anchor_at: must be strictly between 0 and 1")
+        line = next((l for l in lines if isinstance(l, dict) and l.get("id") == a1.get("line")), None)
+        if line is None:
+            errs.append(f'{p}.line: unknown transit line "{a1.get("line")}"')
+        else:
+            br = line.get("branches") if isinstance(line.get("branches"), list) else []
+            ending = [b for b in br if isinstance(b, list) and b and b[-1] == a1.get("branch_to")]
+            if len(ending) != 1:
+                errs.append(f'{p}.branch_to: {len(ending)} branches of {a1.get("line")} end at "{a1.get("branch_to")}" (expected exactly 1)')
+        if a1.get("town") not in {t.get("id") for t in items if isinstance(t, dict)}:
+            errs.append(f'{p}.town: unknown town "{a1.get("town")}"')
+
+    lm = pr.get("landmarks")
+    if lm is not None:
+        p = "procedural.landmarks"
+        ids = {l["id"] for l in w["landmarks"]}
+        if not isinstance(lm, dict):
+            errs.append(f"{p}: expected a mapping")
+            lm = {}
+        for lid, rule in lm.items():
+            if lid not in ids:
+                errs.append(f"{p}.{lid}: unknown landmark (not in landmarks:)")
+            if rule == "anchor":
+                continue
+            if not (isinstance(rule, dict) and len(rule) == 1 and next(iter(rule)) in ("along", "steepest_within", "airport")):
+                errs.append(f"{p}.{lid}: expected anchor, {{ along: m }}, {{ steepest_within: m }} or {{ airport: terminal | apron }}")
+                continue
+            k, v = next(iter(rule.items()))
+            if k == "airport":
+                if v not in ("terminal", "apron"):
+                    errs.append(f"{p}.{lid}.airport: expected terminal | apron")
+            elif not (is_num(v) and v > 0):
+                errs.append(f"{p}.{lid}.{k}: must be > 0")
     return errs
 
 

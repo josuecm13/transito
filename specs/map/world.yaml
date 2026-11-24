@@ -719,3 +719,22 @@ procedural:
     grade: { metro: 0.06, rail: 0.04 }
     bridge: 6
     interchange_radius: 90      # m, stops of different lines closer than this are one station
+  # Act 1 placement (director 2026-11-22, #12 2.2), derived from the generated map, never from coordinates:
+  # Tito's barrio sits at `anchor_at` along the branch of `line` that ends at `branch_to`; the Act 1 strip
+  # runs along that track from the anchor to the branch end. Output: Isthmus.act1, and one report line.
+  act1:
+    line: linea-2
+    branch_to: airport-terminal   # the line's one branch that ends at this stop
+    anchor_at: 0.5                # fraction of that branch's track length (0.5 = midpoint)
+    town: el-corredor             # the town the barrio belongs to (reported share of its built cells)
+    barrio_radius: 340            # m, ~8 blocks of ~85 m across, centred on the anchor
+    strip_half_width: 400         # m each side of the track, from the anchor to the branch end
+  # Act 1 and airport landmarks on the generated map (#12 2.3), by rule, never by coordinates (README
+  # "Procedural isthmus"). The x/y in landmarks: keep driving the current game until #12 2.5.
+  #   anchor | { along: m } | { steepest_within: m } | { airport: terminal | apron }
+  landmarks:
+    tito-home: anchor                          # Tito's family house: the barrio centre
+    corridor-market: { along: 170 }            # Doña Mireya's shop: ~2 blocks down the strip towards the airport
+    miguelito-hills: { steepest_within: 600 }  # the steepest El Corredor ground near the barrio
+    passenger-terminal: { airport: terminal }
+    cargo-terminal: { airport: apron }

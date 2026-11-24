@@ -11,6 +11,7 @@ import type { ReliefParams, UpliftZone } from './proc/relief.ts';
 import type { RoadParams, RouteSpec } from './proc/roads.ts';
 import type { GrowthParams, SuitabilityParams } from './proc/settlements.ts';
 import type { TransitLineSpec, TransitParams } from './proc/transit.ts';
+import type { LandmarkRule } from './proc/landmarks.ts';
 import type { CanalParams, RiverParams } from './proc/water.ts';
 
 export type Range = readonly [number, number];
@@ -275,6 +276,23 @@ export interface ProceduralSpec {
   towns: Omit<GrowthParams, 'towns' | 'separation'> & { separation: number; airportBuffer: number; items: ProcTown[] };
   cover: CoverParams;
   transit: Omit<TransitParams, 'lines'> & { stops: Record<string, Vec2>; lines: ProcLine[] };
+  /** Act 1 placement, derived from the generated transit track (procedural.act1; src/world/proc/act1.ts). */
+  act1: ProcAct1;
+  /** Landmarks the procedural map places by rule (procedural.landmarks; src/world/proc/landmarks.ts). */
+  landmarks: { id: string; rule: LandmarkRule }[];
+}
+
+export interface ProcAct1 {
+  line: string;
+  /** Stop id the followed branch ends at, and that branch's index in the line (resolved by the parser). */
+  branchTo: string;
+  branch: number;
+  anchorAt: number;
+  /** Town id; `townIndex` is its index in towns.items. */
+  town: string;
+  townIndex: number;
+  barrioRadius: number;
+  stripHalfWidth: number;
 }
 
 export class WorldSpecError extends Error {
@@ -637,7 +655,7 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
   const waterBodies = parseWaterBodies(r, doc.water_bodies);
   const airports = parseAirports(r, doc.airports);
   const mainRoads = parseMainRoads(r, doc.main_roads);
-  const procedural = parseProcedural(r, doc.procedural, bounds);
+  const procedural = parseProcedural(r, doc.procedural, bounds, landmarks.map((l) => l.id));
 
   if (r.problems.length > 0) throw new WorldSpecError(r.problems);
 
@@ -1898,12 +1916,14 @@ class ProcReader {
   }
 }
 
-function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; height: number }): ProceduralSpec {
+function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; height: number }, landmarkIds: readonly string[]): ProceduralSpec {
   const P = new ProcReader(r, bounds);
   const path = 'procedural';
-  const o = P.sec(raw, path, ['cell', 'relief', 'lake', 'rivers', 'canal', 'airport', 'roads', 'suitability', 'towns', 'cover', 'transit']) ?? {};
+  const o = P.sec(raw, path, ['cell', 'relief', 'lake', 'rivers', 'canal', 'airport', 'roads', 'suitability', 'towns', 'cover', 'transit', 'act1', 'landmarks']) ?? {};
   const cell = o.cell === undefined ? NaN : P.num(o, 'cell', path, 'pos');
   const roads = parseProcRoads(P, o.roads, `${path}.roads`);
+  const towns = parseProcTowns(P, o.towns, `${path}.towns`, roads.routes);
+  const transit = parseProcTransit(P, o.transit, `${path}.transit`);
   return {
     cell,
     relief: parseProcRelief(P, o.relief, `${path}.relief`),
@@ -1913,10 +1933,65 @@ function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; heigh
     airport: parseProcAirport(P, o.airport, `${path}.airport`),
     roads,
     suitability: parseProcSuitability(P, o.suitability, `${path}.suitability`),
-    towns: parseProcTowns(P, o.towns, `${path}.towns`, roads.routes),
+    towns,
     cover: parseProcCover(P, o.cover, `${path}.cover`),
-    transit: parseProcTransit(P, o.transit, `${path}.transit`),
+    transit,
+    act1: parseProcAct1(P, o.act1, `${path}.act1`, transit.lines, towns.items),
+    landmarks: parseProcLandmarks(P, o.landmarks, `${path}.landmarks`, landmarkIds),
   };
+}
+
+const AIRPORT_PARTS = ['terminal', 'apron'] as const;
+
+function parseProcLandmarks(P: ProcReader, raw: unknown, path: string, landmarkIds: readonly string[]): { id: string; rule: LandmarkRule }[] {
+  const o = P.r.obj(raw, path);
+  if (!o) return [];
+  return Object.entries(o).flatMap(([id, v]): { id: string; rule: LandmarkRule }[] => {
+    const p = `${path}.${id}`;
+    if (!landmarkIds.includes(id)) P.r.problems.push(`${p}: unknown landmark (not in landmarks:)`);
+    if (v === 'anchor') return [{ id, rule: { kind: 'anchor' } }];
+    const m = P.r.obj(v, p);
+    if (!m) return [];
+    const keys = Object.keys(m);
+    if (keys.length !== 1 || !['along', 'steepest_within', 'airport'].includes(keys[0]!)) {
+      P.r.problems.push(`${p}: expected anchor, { along: m }, { steepest_within: m } or { airport: ${AIRPORT_PARTS.join(' | ')} }`);
+      return [];
+    }
+    if (keys[0] === 'along') return [{ id, rule: { kind: 'along', metres: P.num(m, 'along', p, 'pos') } }];
+    if (keys[0] === 'steepest_within') return [{ id, rule: { kind: 'steepest', within: P.num(m, 'steepest_within', p, 'pos') } }];
+    const part = m.airport;
+    if (!AIRPORT_PARTS.includes(part as never)) {
+      P.r.problems.push(`${p}.airport: expected ${AIRPORT_PARTS.join(' | ')}`);
+      return [];
+    }
+    return [{ id, rule: { kind: 'airport', part: part as 'terminal' | 'apron' } }];
+  });
+}
+
+function parseProcAct1(P: ProcReader, raw: unknown, path: string, lines: readonly ProcLine[], towns: readonly ProcTown[]): ProcAct1 {
+  const o = P.sec(raw, path, ['line', 'branch_to', 'anchor_at', 'town', 'barrio_radius', 'strip_half_width']) ?? {};
+  const out: ProcAct1 = {
+    line: P.r.str(o, 'line', path),
+    branchTo: P.r.str(o, 'branch_to', path),
+    branch: -1,
+    anchorAt: P.num(o, 'anchor_at', path, 'frac'),
+    town: P.r.str(o, 'town', path),
+    townIndex: -1,
+    barrioRadius: P.num(o, 'barrio_radius', path, 'pos'),
+    stripHalfWidth: P.num(o, 'strip_half_width', path, 'pos'),
+  };
+  if (out.anchorAt === 0 || out.anchorAt === 1) P.r.problems.push(`${path}.anchor_at: must be strictly between 0 and 1`);
+  const line = lines.find((l) => l.id === out.line);
+  if (out.line !== '' && !line) P.r.problems.push(`${path}.line: unknown transit line "${out.line}"`);
+  if (line && out.branchTo !== '') {
+    const ending = line.branches.flatMap((b, i) => (b[b.length - 1] === out.branchTo ? [i] : []));
+    if (ending.length !== 1) {
+      P.r.problems.push(`${path}.branch_to: ${ending.length} branches of ${out.line} end at "${out.branchTo}" (expected exactly 1)`);
+    } else out.branch = ending[0]!;
+  }
+  out.townIndex = towns.findIndex((t) => t.id === out.town);
+  if (out.town !== '' && out.townIndex < 0) P.r.problems.push(`${path}.town: unknown town "${out.town}"`);
+  return out;
 }
 
 function parseProcRelief(P: ProcReader, raw: unknown, path: string): ReliefParams {

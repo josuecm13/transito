@@ -21,6 +21,8 @@ import type { Dot, RenderInput, Stroke } from './render.ts';
 import { nearRoads, routeRoads, type RoadsResult } from './roads.ts';
 import { growTowns, suitability, type GrowthResult, type TownSpec } from './settlements.ts';
 import { routeTransit, type TransitResult } from './transit.ts';
+import { placeAct1, type Act1Placement } from './act1.ts';
+import { placeLandmarks, type PlacedLandmark } from './landmarks.ts';
 import { extractRivers, routeCanal, type CanalResult, type RiverSegment } from './water.ts';
 
 export interface Isthmus {
@@ -35,6 +37,10 @@ export interface Isthmus {
   readonly towns: GrowthResult;
   readonly cover: Uint8Array;
   readonly transit: TransitResult;
+  /** Act 1 placement derived from the transit track (procedural.act1). */
+  readonly act1: Act1Placement;
+  /** Landmarks placed by rule (procedural.landmarks), in spec order. */
+  readonly landmarks: readonly PlacedLandmark[];
   readonly report: readonly string[];
 }
 
@@ -239,7 +245,17 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
     lines: P.transit.lines.map((l) => ({ ...l, branches: l.branches.map((b) => b.map(transitStop)) })),
   });
   report.push(`transit: ${transit.lines.map((l) => l.id).join(', ')}; ${transit.stations.length} stations, ${transit.stations.filter((s) => s.interchange).length} interchanges`);
-  return { relief, height, lake, rivers, canal, airport, roads, towns, cover, transit, report };
+  const A = P.act1;
+  const track = transit.lines.find((l) => l.id === A.line)?.tracks[A.branch];
+  if (!track || track.length < 2) throw new Error(`act1: no routed track for ${A.line} branch ${A.branch}`);
+  const act1 = placeAct1(track, towns.owner, towns.density, relief.land, lake.lake, { ...A, town: A.townIndex });
+  report.push(
+    `act1: ${A.line} → ${A.branchTo} at ${A.anchorAt}: anchor (${act1.anchor.x.toFixed(0)}, ${act1.anchor.y.toFixed(0)})${act1.anchorDry ? '' : ' NOT DRY'}, ` +
+      `barrio ${A.barrioRadius} m ${(act1.townShare * 100).toFixed(0)}% ${A.town}, strip ${(act1.strip.lengthM / 1000).toFixed(2)} km × ${2 * A.stripHalfWidth} m`,
+  );
+  const landmarks = placeLandmarks(P.landmarks, act1, airport, towns.owner, height, A.townIndex);
+  report.push(`landmarks: ${landmarks.map((l) => `${l.id} (${l.at.x.toFixed(0)}, ${l.at.y.toFixed(0)})`).join(', ')}`);
+  return { relief, height, lake, rivers, canal, airport, roads, towns, cover, transit, act1, landmarks, report };
 }
 
 const RIVER_BLUE: [number, number, number] = [52, 112, 166];
@@ -309,6 +325,22 @@ export function isthmusRenderInput(iso: Isthmus): RenderInput {
       ? { at: st.at, radius: 30, fill: [250, 250, 250], ring: [30, 30, 30], ringWidth: 7, core: { radius: 13, color: [30, 30, 30] } }
       : { at: st.at, radius: st.terminal ? 26 : 19, fill: [250, 250, 250], ring: lineColor.get(st.lines[0]!) ?? [0, 0, 0], ringWidth: st.terminal ? 9 : 7 },
   );
+  // Act 1 overlay (orange): the barrio ring, the strip's edges, and the landmarks placed by rule.
+  const ACT1: [number, number, number] = [236, 112, 24];
+  const { centre, radius } = iso.act1.barrio;
+  const circle = Array.from({ length: 73 }, (_, k) => ({ x: centre.x + radius * Math.cos((k * Math.PI) / 36), y: centre.y + radius * Math.sin((k * Math.PI) / 36) }));
+  strokes.push({ points: circle, width: 9, color: ACT1, dash: [40, 22] });
+  const line = iso.act1.strip.centreline;
+  for (const side of [1, -1]) {
+    const edge = line.map((q, k) => {
+      const a = line[Math.max(0, k - 12)]!; // windowed normal: the routed track zigzags cell to cell
+      const b = line[Math.min(line.length - 1, k + 12)]!;
+      const l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      return { x: q.x - (side * (b.y - a.y) * iso.act1.strip.halfWidth) / l, y: q.y + (side * (b.x - a.x) * iso.act1.strip.halfWidth) / l };
+    });
+    strokes.push({ points: edge.filter((_, k) => k % 6 === 0 || k === edge.length - 1), width: 6, color: ACT1, dash: [26, 26] });
+  }
+  for (const lm of iso.landmarks) dots.push({ at: lm.at, radius: 24, fill: ACT1, ring: [40, 24, 10], ringWidth: 6 });
   return {
     dots,
     height: iso.height,
