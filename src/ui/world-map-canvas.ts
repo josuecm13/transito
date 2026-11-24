@@ -391,7 +391,8 @@ export function drawWorldMap(g: Ctx, frame: WorldMapFrame, data: WorldData, deta
         },
       });
     }
-    options.push({ box: boxAround(nameX, p.y, nw2, 16), draw: drawName(p.y) });
+    // Name alone at its point, then nudged above / below (e.g. when Tito or a landmark dot sits on it).
+    for (const dy of [0, -20, 20, -40, 40]) options.push({ box: boxAround(nameX, p.y + dy, nw2, 16), draw: drawName(p.y + dy) });
     candidates.push({ priority: 90, options });
   }
 

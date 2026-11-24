@@ -1,4 +1,4 @@
-import type { HeightGrid } from '../world/terrain.ts';
+import type { HeightGrid } from '../world/height-grid.ts';
 
 /** Map colours of the land-cover classes (layer 1), '#rrggbb'. Water is the sea colour of the map screens. */
 export const COVER_MAP_COLORS: Record<string, string> = {

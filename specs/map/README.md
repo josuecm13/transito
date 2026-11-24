@@ -142,6 +142,14 @@ metrics live in `street-metrics.yaml`.
 
 ## Layers (map restart, layers 1-5)
 
+> **Retired from the game (#12 2.5, card F5, 2026-11-24).** The game runs on the procedural map
+> (`procedural:`, `src/world/proc/`, adapted by `src/world/proc/game-world.ts` and `game-spec.ts`). The
+> authored generators below (`src/world/layers/`, the authored `terrain.ts` height model) and their tests
+> were removed. The sections stay in world.yaml: `parseWorldSpec` still parses them strictly and
+> `tools/render_map_preview.py` still validates and draws them in `preview.svg`, but no game code reads
+> `land_cover`, `rivers`, `water_bodies`, `airports` or `main_roads`; of `relief` only `relief.grid` is read.
+> The rest of this section describes the retired pipeline.
+
 Everything on top of the unchanged coastline (`geometry.land`, bounds, islands, grid) is generated in
 layers. Layer N reads only the outputs of layers < N (enforced by `tests/layers-contract.test.ts`, a static
 import scan of `src/world/layers/`). Layers 1-5 cover the whole isthmus on a coarse grid
@@ -189,7 +197,7 @@ New sections (all parsed strictly by `parseWorldSpec`: an unknown key is an erro
 - `main_roads`: authored node chains for Interamericana, Transístmica, Corredor Sur and Cinta Costera
   (boulevard + reclaimed park strip + bay-side viaduct), plus params (max grade, bridge and viaduct rules).
   A road may cross water only under a declared `bridges` entry or as a `structure: viaduct`. No Corredor Norte.
-- `relief.ridges`, `relief.grid.far`: whole-isthmus ridges and the 16 m far grid (read by `terrain.ts` since layer 2).
+- `relief.ridges`, `relief.grid.far`: whole-isthmus ridges and the 16 m far grid (read by the retired authored `terrain.ts`; the game reads only `relief.grid`).
 
 Old fields these supersede (they keep working now; the switch happens when the layer is implemented in I2/I3,
 and the old entries are then removed):

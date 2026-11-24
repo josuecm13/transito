@@ -1,8 +1,8 @@
 import type { WorldData } from '../world/world-data.ts';
 import type { Vec2 } from '../world/vec.ts';
-import type { HeightGrid } from '../world/terrain.ts';
-import type { Layer1Output } from '../world/layers/layer1-land-cover.ts';
-import type { Layer3Output } from '../world/layers/layer3-water.ts';
+import type { HeightGrid } from '../world/height-grid.ts';
+import type { LandCover } from '../world/cover.ts';
+import type { GameWater } from '../world/proc/game-world.ts';
 import { hillshadeAt, pixelFrame, pixelToSpec, shadedCoverColor, specToPixel } from '../sim/map-layers.ts';
 import type { PixelFrame, Rgb } from '../sim/map-layers.ts';
 
@@ -33,7 +33,7 @@ function newCanvas(w: number, h: number): { canvas: HTMLCanvasElement; g: Ctx } 
  * the sea stays transparent. Water-class cells are painted as forest first: the true coast is the land
  * polygon, not the 16 m cover cells.
  */
-export function bakeCover(rect: Rect, metersPerPx: number, cover: Layer1Output, land: readonly (readonly Vec2[])[], relief?: HeightGrid): BaseImage {
+export function bakeCover(rect: Rect, metersPerPx: number, cover: LandCover, land: readonly (readonly Vec2[])[], relief?: HeightGrid): BaseImage {
   const frame = pixelFrame(rect, metersPerPx);
   const { canvas, g } = newCanvas(frame.w, frame.h);
   const img = g.createImageData(frame.w, frame.h);
@@ -80,7 +80,7 @@ export function bakeCover(rect: Rect, metersPerPx: number, cover: Layer1Output, 
  * Layer 3 on a 2D canvas: rivers (real widths), lake / canal reaches / lock chambers (holes = islands),
  * lock aprons as grey marks. `toPx` maps spec to canvas pixels; `metersPerPx` is the canvas scale.
  */
-export function paintWater(g: Ctx, toPx: (p: Vec2) => Vec2, metersPerPx: number, water: Layer3Output): void {
+export function paintWater(g: Ctx, toPx: (p: Vec2) => Vec2, metersPerPx: number, water: GameWater): void {
   g.save();
   g.lineCap = 'round';
   g.lineJoin = 'round';
@@ -126,7 +126,7 @@ export function paintWater(g: Ctx, toPx: (p: Vec2) => Vec2, metersPerPx: number,
  * The whole isthmus drawn once (`rect`, usually the map bounds): land cover with hillshade, then the
  * layer 3 water. The sea is transparent so the caller's sea / shallows show through.
  */
-export function bakeIsthmusBase(data: WorldData, cover: Layer1Output, rect: Rect, metersPerPx: number): BaseImage {
+export function bakeIsthmusBase(data: WorldData, cover: LandCover, rect: Rect, metersPerPx: number): BaseImage {
   const land = [data.spec.land, ...data.spec.islands.map((i) => i.points)];
   const base = bakeCover(rect, metersPerPx, cover, land, data.terrain.farGrid);
   const g = base.canvas.getContext('2d') as Ctx;

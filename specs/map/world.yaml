@@ -738,3 +738,10 @@ procedural:
     miguelito-hills: { steepest_within: 600 }  # the steepest El Corredor ground near the barrio
     passenger-terminal: { airport: terminal }
     cargo-terminal: { airport: apron }
+  # What the game loads from the procedural map (#12 2.5): the active area is the Act 1 strip and barrio
+  # (bounding box + rect_margin); districts come from the generated map on a district_cell grid
+  # (majority of each cell: sea, lake, a town, the airfield, else wild), named by the districts: ids above.
+  game:
+    district_cell: 200          # m, cell of the derived district grid (the authored grid stays 1 km)
+    rect_margin: 300            # m around the strip and the barrio
+    districts: { sea: sea, lake: gatun-lake, wild: jungle-ridge, airport: airport, la-ciudad: city-core, colon: colon, balboa: pacific-locks, el-corredor: tito-corridor, gamboa: canal-central }

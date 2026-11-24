@@ -46,6 +46,15 @@ export interface CityOptions {
   profile?: Record<string, number>;
 }
 
+/**
+ * A block of a built district (one with a `blockout.districts` entry): its ground is city ground.
+ * Any other face of the street graph (wild land closed by the active-area frame, a highway or a
+ * runway) is not a city block: the land cover shows there.
+ */
+export function isCityBlock(spec: WorldSpec, block: { district?: string | undefined }): boolean {
+  return block.district !== undefined && spec.blockout.districts[block.district] !== undefined;
+}
+
 const now = (): number => globalThis.performance?.now() ?? Date.now();
 
 export function deriveCity(spec: WorldSpec, slice: WorldSlice, net: StreetNetwork, opts: CityOptions = {}): City {

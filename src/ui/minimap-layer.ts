@@ -6,7 +6,8 @@ import { AVENUE_KINDS } from '../world/streets/region.ts';
 import { STREET_LAYERS } from '../world/street-surface.ts';
 import type { StreetClass } from '../world/streets/planar-graph.ts';
 import { courtRect } from '../world/court-layout.ts';
-import type { Layer1Output } from '../world/layers/layer1-land-cover.ts';
+import { isCityBlock } from '../world/streets/city.ts';
+import type { LandCover } from '../world/cover.ts';
 import { bakeCover, paintWater } from './map-base.ts';
 
 export const MINIMAP_COLORS = {
@@ -44,7 +45,7 @@ export interface StaticLayer {
  * band under the carriageway, real widths), parks / courts, buildings. Used by the minimap and the
  * world map's detail layer.
  */
-export function renderStaticLayer(data: WorldData, metersPerPx: number, cover?: Layer1Output): StaticLayer {
+export function renderStaticLayer(data: WorldData, metersPerPx: number, cover?: LandCover): StaticLayer {
   const { rect } = data.slice;
   const minX = rect.minX - LAYER_MARGIN_M;
   const maxY = rect.maxY + LAYER_MARGIN_M;
@@ -106,14 +107,14 @@ export function renderStaticLayer(data: WorldData, metersPerPx: number, cover?: 
     paintWater(g, toLayer, metersPerPx, data.water);
   }
 
-  // Blocks by land use (court blocks green with the court on top).
+  // City blocks by land use (court blocks green with the court on top); other faces keep the land cover.
   const { streets, city } = data;
   const useOf = (block: number) => city.landUse[block]?.use ?? 'residential';
   const blockColor = (block: number): string =>
     useOf(block) === 'park' || useOf(block) === 'court' ? MINIMAP_COLORS.park : useOf(block) === 'median' ? MINIMAP_COLORS.median : MINIMAP_COLORS.block;
   for (const color of [MINIMAP_COLORS.block, MINIMAP_COLORS.park, MINIMAP_COLORS.median]) {
     fillPolys(
-      streets.blocks.filter((b) => blockColor(b.id) === color).map((b) => ({ outer: b.ring, holes: b.holes })),
+      streets.blocks.filter((b) => isCityBlock(data.spec, b) && blockColor(b.id) === color).map((b) => ({ outer: b.ring, holes: b.holes })),
       color,
     );
   }

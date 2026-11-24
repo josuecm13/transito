@@ -12,7 +12,9 @@
  *
  * Corner between consecutive arms A, B (CCW) at a node, built only if A or B is a sidewalk street:
  *   - wedge < 180° − PARALLEL_TOL: miter, the intersection of A's left offset line with B's right
- *     offset line (one node);
+ *     offset line (one node). If the wedge is acute against a street without walkway and that miter
+ *     lands on a carriageway (a narrow island closed by a third street), the corner moves along the
+ *     sidewalk arm's offset line to the nearest point off every carriageway;
  *   - wider wedges (near-straight, reflex, and the 360° of a dead end): an arc of radius
  *     R = max offset about the node, from where the circle meets A's left line to where it meets
  *     B's right line, in chords that keep ARC_CLEARANCE off both carriageways. A dead end thus
@@ -351,6 +353,8 @@ export function buildWalkGraph(
     }
   }
   for (const list of arms) list.sort((p, q) => p.angle - q.angle || p.edge - q.edge);
+  // Rendered (network) carriageways: acute corner fallback below, and walkway cuts further down.
+  const carriageways = new CarriagewayIndex(network);
 
   function makeCorner(v: Vec2, from: number, A: Arm, B: Arm, wedge: number): Corner {
     const nA = { x: -A.dir.y, y: A.dir.x };
@@ -399,8 +403,45 @@ export function buildWalkGraph(
     const rx = pB.x - pA.x;
     const ry = pB.y - pA.y;
     const s = (rx * B.dir.y - ry * B.dir.x) / den;
-    const id = addNode({ x: pA.x + A.dir.x * s, y: pA.y + A.dir.y * s }, from);
+    let corner: Vec2 = { x: pA.x + A.dir.x * s, y: pA.y + A.dir.y * s };
+    // Acute wedge against a bare carriageway: the miter runs far out along the sidewalk arm and can
+    // land on a neighbouring carriageway (a narrow island where another street closes the wedge).
+    // Then the corner falls on the sidewalk arm's own line, at the nearest point off every carriageway.
+    if (wedge < Math.PI / 2 && A.type !== B.type && (A.type === 'bare' || B.type === 'bare') && carriageways.contains(corner)) {
+      const onA = A.type === 'sidewalk';
+      const arm = onA ? A : B;
+      const base = onA ? pA : pB;
+      const s0 = onA ? s : ((corner.x - pB.x) * B.dir.x + (corner.y - pB.y) * B.dir.y);
+      const found = clearPointOnLine(base, arm.dir, s0, arm.length);
+      if (found) corner = found;
+    }
+    const id = addNode(corner, from);
     return { forPrev: id, forNext: id };
+  }
+
+  /**
+   * Point base + t·dir off every carriageway, with t in [0, maxT] nearest to t0 (sampled every
+   * SPLIT_SAMPLE m, then bisected to the carriageway edge); undefined if the whole line is covered.
+   */
+  function clearPointOnLine(base: Vec2, dir: Vec2, t0: number, maxT: number): Vec2 | undefined {
+    const at = (t: number): Vec2 => ({ x: base.x + dir.x * t, y: base.y + dir.y * t });
+    const clear = (t: number): boolean => !carriageways.contains(at(t));
+    const n = Math.ceil(Math.max(t0, maxT - t0) / SPLIT_SAMPLE);
+    for (let k = 1; k <= n; k++) {
+      for (const sign of [-1, 1]) {
+        const t = t0 + sign * k * SPLIT_SAMPLE;
+        if (t < 0 || t > maxT || !clear(t)) continue;
+        let inside = t - sign * SPLIT_SAMPLE;
+        let outside = t;
+        for (let j = 0; j < 30; j++) {
+          const mid = (inside + outside) / 2;
+          if (clear(mid)) outside = mid;
+          else inside = mid;
+        }
+        return at(outside);
+      }
+    }
+    return undefined;
   }
 
   // Per street node: corners by pair index i = (arm i, arm i+1); alley walkway ends by edge id.
@@ -496,13 +537,15 @@ export function buildWalkGraph(
     }
   }
 
-  const carriageways = new CarriagewayIndex(network);
   // A walkway along a street that still runs across a rendered (network) carriageway is cut at its
   // edges. The stretch inside becomes a 'crossing' (it survives only if both its ends do, i.e. the
   // walkway passes right through), its nodes attributed to the nearer end of the crossed edge as
   // joined; a walkway ending inside a carriageway is thus clipped at the kerb.
   const split: WalkEdge[] = [];
   const onBoundary = new Set<number>();
+  /** Per cut node: the street node of the walkway end on its side (its origin if no crossing survives). */
+  const kerbOrigin = new Map<number, number>();
+  const builtNodes = nodes.length;
   const intrudes = (e: WalkEdge): boolean => {
     const p = nodes[e.a] as Vec2;
     const q = nodes[e.b] as Vec2;
@@ -547,8 +590,14 @@ export function buildWalkGraph(
     for (const sp of merged) {
       const x0 = sp.t0 <= 0 ? e.a : addNode(lerp(p, q, sp.t0), sp.at);
       const x1 = sp.t1 >= 1 ? e.b : addNode(lerp(p, q, sp.t1), sp.at);
-      if (sp.t0 > 0) onBoundary.add(x0);
-      if (sp.t1 < 1) onBoundary.add(x1);
+      if (sp.t0 > 0) {
+        onBoundary.add(x0);
+        if (x0 >= builtNodes && !kerbOrigin.has(x0)) kerbOrigin.set(x0, origin[e.a] as number);
+      }
+      if (sp.t1 < 1) {
+        onBoundary.add(x1);
+        if (x1 >= builtNodes && !kerbOrigin.has(x1)) kerbOrigin.set(x1, origin[e.b] as number);
+      }
       if (cur !== x0) split.push({ a: cur, b: x0, length: distance(nodes[cur] as Vec2, nodes[x0] as Vec2), kind: e.kind });
       split.push({ a: x0, b: x1, length: distance(nodes[x0] as Vec2, nodes[x1] as Vec2), kind: 'crossing' });
       cur = x1;
@@ -561,10 +610,15 @@ export function buildWalkGraph(
   const alive = nodes.map((p, i) => keep(p) && (onBoundary.has(i) || !carriageways.contains(p)));
   const kept = split.filter((e) => e.length > 1e-6 && alive[e.a] && alive[e.b]);
   const used = new Array<boolean>(nodes.length).fill(false);
+  const crossed = new Set<number>();
   for (const e of kept) {
     used[e.a] = true;
     used[e.b] = true;
+    if (e.kind === 'crossing') crossed.add(e.a).add(e.b);
   }
+  // A cut whose crossing did not survive is the kerb end of its walkway: it belongs to that walkway's
+  // street node, not to the crossed street's.
+  for (const [i, o] of kerbOrigin) if (!crossed.has(i)) origin[i] = o;
   const remap = new Array<number>(nodes.length).fill(-1);
   const outNodes: Vec2[] = [];
   const outOrigin: number[] = [];

@@ -280,6 +280,15 @@ export interface ProceduralSpec {
   act1: ProcAct1;
   /** Landmarks the procedural map places by rule (procedural.landmarks; src/world/proc/landmarks.ts). */
   landmarks: { id: string; rule: LandmarkRule }[];
+  /** What the game loads from the procedural map (procedural.game; src/world/proc/game-spec.ts). */
+  game: ProcGame;
+}
+
+export interface ProcGame {
+  districtCell: number;
+  rectMargin: number;
+  /** District id for each source: sea, lake, wild, airport, and every town id. */
+  districts: Record<string, string>;
 }
 
 export interface ProcAct1 {
@@ -655,7 +664,7 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
   const waterBodies = parseWaterBodies(r, doc.water_bodies);
   const airports = parseAirports(r, doc.airports);
   const mainRoads = parseMainRoads(r, doc.main_roads);
-  const procedural = parseProcedural(r, doc.procedural, bounds, landmarks.map((l) => l.id));
+  const procedural = parseProcedural(r, doc.procedural, bounds, landmarks.map((l) => l.id), districts.map((d) => d.id));
 
   if (r.problems.length > 0) throw new WorldSpecError(r.problems);
 
@@ -1022,7 +1031,8 @@ export function districtLabelPoint(spec: WorldSpec, d: District): Vec2 | undefin
 }
 
 // ---------------------------------------------------------------------------------------------
-// relief (terrain height model). Semantics: README.md "Relief"; model: src/world/terrain.ts.
+// relief (terrain height model). Semantics: README.md "Relief". The game reads only `relief.grid` (ProcTerrain,
+// src/world/proc/game-world.ts); the authored height model was retired (#12 2.5, card F5).
 
 /** Seeded fractal noise: `octaves` layers, each with half the wavelength and `persistence` x the amplitude. */
 export interface NoiseSpec {
@@ -1287,7 +1297,8 @@ function parseRelief(r: Reader, raw: unknown, bounds: { width: number; height: n
 
 
 // ---------------------------------------------------------------------------------------------
-// Layers 1-5 (whole isthmus). Semantics: README.md "Layers"; code: src/world/layers/.
+// Layers 1-5 (whole isthmus). Semantics: README.md "Layers". Parsed and validated (and drawn in preview.svg);
+// their generators were retired (#12 2.5, card F5): the game runs on the procedural map (src/world/proc).
 // These sections are parsed strictly: an unknown key is an error.
 
 export interface LandCoverSpec {
@@ -1916,10 +1927,10 @@ class ProcReader {
   }
 }
 
-function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; height: number }, landmarkIds: readonly string[]): ProceduralSpec {
+function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; height: number }, landmarkIds: readonly string[], districtIds: readonly string[]): ProceduralSpec {
   const P = new ProcReader(r, bounds);
   const path = 'procedural';
-  const o = P.sec(raw, path, ['cell', 'relief', 'lake', 'rivers', 'canal', 'airport', 'roads', 'suitability', 'towns', 'cover', 'transit', 'act1', 'landmarks']) ?? {};
+  const o = P.sec(raw, path, ['cell', 'relief', 'lake', 'rivers', 'canal', 'airport', 'roads', 'suitability', 'towns', 'cover', 'transit', 'act1', 'landmarks', 'game']) ?? {};
   const cell = o.cell === undefined ? NaN : P.num(o, 'cell', path, 'pos');
   const roads = parseProcRoads(P, o.roads, `${path}.roads`);
   const towns = parseProcTowns(P, o.towns, `${path}.towns`, roads.routes);
@@ -1938,7 +1949,26 @@ function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; heigh
     transit,
     act1: parseProcAct1(P, o.act1, `${path}.act1`, transit.lines, towns.items),
     landmarks: parseProcLandmarks(P, o.landmarks, `${path}.landmarks`, landmarkIds),
+    game: parseProcGame(P, o.game, `${path}.game`, towns.items, districtIds, bounds),
   };
+}
+
+function parseProcGame(P: ProcReader, raw: unknown, path: string, towns: readonly ProcTown[], districtIds: readonly string[], bounds: { width: number; height: number }): ProcGame {
+  const o = P.sec(raw, path, ['district_cell', 'rect_margin', 'districts']) ?? {};
+  const out: ProcGame = { districtCell: P.num(o, 'district_cell', path, 'pos'), rectMargin: P.num(o, 'rect_margin', path, 'nonneg'), districts: {} };
+  if (out.districtCell > 0 && (bounds.width % out.districtCell !== 0 || bounds.height % out.districtCell !== 0)) {
+    P.r.problems.push(`${path}.district_cell: ${out.districtCell} m must divide the bounds (${bounds.width} × ${bounds.height})`);
+  }
+  const sources = ['sea', 'lake', 'wild', 'airport', ...towns.map((t) => t.id)];
+  const dp = `${path}.districts`;
+  const d = P.sec(o.districts, dp, sources) ?? {};
+  for (const src of sources) {
+    const id = d[src];
+    if (id === undefined) continue; // reported as missing by sec()
+    if (typeof id !== 'string' || !districtIds.includes(id)) P.r.problems.push(`${dp}.${src}: unknown district "${String(id)}"`);
+    else out.districts[src] = id;
+  }
+  return out;
 }
 
 const AIRPORT_PARTS = ['terminal', 'apron'] as const;

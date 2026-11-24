@@ -861,6 +861,7 @@ PROC_SCHEMA = {
                 "grade": {"metro": "pos", "rail": "pos"}, "bridge": "pos", "interchange_radius": "pos"},
     "act1": {"line": "str", "branch_to": "str", "anchor_at": "frac", "town": "str", "barrio_radius": "pos", "strip_half_width": "pos"},
     "?landmarks": "landmark_rules",
+    "game": {"district_cell": "pos", "rect_margin": "nonneg", "districts": "game_districts"},
 }
 ZONE = {"line": {"id": "str", "kind": "str", "points": "pts2", "width": "pos", "rate": "nonneg"},
         "disc": {"id": "str", "kind": "str", "at": "pt", "radius": "pos", "rate": "nonneg"}}
@@ -1053,6 +1054,27 @@ def check_procedural(w):
                 errs.append(f'{p}.branch_to: {len(ending)} branches of {a1.get("line")} end at "{a1.get("branch_to")}" (expected exactly 1)')
         if a1.get("town") not in {t.get("id") for t in items if isinstance(t, dict)}:
             errs.append(f'{p}.town: unknown town "{a1.get("town")}"')
+
+    gm = pr.get("game")
+    if isinstance(gm, dict):
+        p = "procedural.game"
+        dc = gm.get("district_cell")
+        if is_num(dc) and dc > 0 and (W % dc or H % dc):
+            errs.append(f"{p}.district_cell: {dc} m must divide the bounds ({W} × {H})")
+        gd = gm.get("districts")
+        sources = ["sea", "lake", "wild", "airport", *[t.get("id") for t in items if isinstance(t, dict)]]
+        dids = {d["id"] for d in w["districts"]}
+        if not isinstance(gd, dict):
+            errs.append(f"{p}.districts: expected a mapping")
+        else:
+            for k in gd:
+                if k not in sources:
+                    errs.append(f"{p}.districts.{k}: unknown key (allowed: {', '.join(sources)})")
+            for src in sources:
+                if src not in gd:
+                    errs.append(f"{p}.districts.{src}: missing")
+                elif gd[src] not in dids:
+                    errs.append(f'{p}.districts.{src}: unknown district "{gd[src]}"')
 
     lm = pr.get("landmarks")
     if lm is not None:

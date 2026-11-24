@@ -1,0 +1,18 @@
+relief        d66f08a9110d23ba
+height        c736933468c9f181
+lake          c2aba0292f1280e5
+rivers        6256993fbd668653
+canal         5a958025e816674f
+airport       e19d7690ab38cc65
+roads         bad53f02a3c3eff0
+townsOwner    0e1490006af003b2
+townsDensity  59e8f80095074b9c
+cover         0529f7ba4048a063
+transit       fd009fcdb88efe91
+  report: land 39.32 km², max height 552 m
+  report: lake 5.00 km² at 70.5 m; dam (990, 6450), catchment 8.38 km²
+  report: rivers 37 segments; canal 104 pts
+  report: airport at (5170, 2620), heading 10°, spread 38.5 m
+  report: roads: interamericana 191, transistmica 315, gamboa-road 177, coastal-avenue 82, railroad 424
+  report: towns: la-ciudad 1.75/1.8, colon 0.59/0.6, balboa 0.45/0.45, el-corredor 0.54/0.6, gamboa 0.01/0.1 km²
+  report: transit: linea-1, linea-2, linea-3, ferrocarril; 30 stations, 2 interchanges

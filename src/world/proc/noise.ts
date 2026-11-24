@@ -1,6 +1,6 @@
 /**
  * Seeded noise functions for the procedural map. Integer-hash gradient noise (same hash and gradient
- * table as terrain.ts), so every value is a pure function of (x, y, seed): no Math.random anywhere.
+ * table as the retired authored terrain model), so every value is a pure function of (x, y, seed): no Math.random anywhere.
  *
  * - fbm: fractal Brownian motion, normalised to roughly [-1, 1].
  * - ridged: Musgrave ridged multifractal, roughly [0, 1]; sharp crests, rounded valleys.

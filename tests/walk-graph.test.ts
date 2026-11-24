@@ -206,6 +206,29 @@ test('synthetic local across a highway (no sidewalk): crossings over the highway
   assert.equal(new Set(components(g)).size, 1);
 });
 
+test('synthetic acute T onto a highway, wedge closed by a second local: corner on the sidewalk arm, crossing kept', () => {
+  // Act 1 street nodes 11 / 301 / 326 (procedural map, 2026-11-24), shifted to 11 = origin: a local
+  // leaves the highway at ~48° and meets a second local from the next highway node, leaving a
+  // ~1 m² island. The plain miter of the acute corner lands on the second local's carriageway.
+  const sg = snapshot([[0, 0], [19.2, 9.8], [27.5, -10.6], [-32.3, -16.7], [63.7, 32.5], [-6.8, 60.7], [50, -40]], [
+    [3, 0, 'avenue', 24, 0], [0, 1, 'avenue', 24, 0], [1, 4, 'avenue', 24, 0],
+    [0, 2, ...LOCAL], [1, 2, ...LOCAL], [1, 5, ...LOCAL], [2, 6, ...LOCAL],
+  ]);
+  const g = buildWalkGraph(sg);
+  assert.ok((crossingsByOrigin(g).get(0) ?? 0) >= 1, 'acute T: a crossing over the local mouth');
+  // Each intersection's walk nodes are joined by its own edges (a kerb cut belongs to its walkway).
+  const parent = g.nodes.map((_, i) => i);
+  const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x]!)));
+  for (const e of g.edges) if (g.origin[e.a] === g.origin[e.b]) parent[find(e.a)] = find(e.b);
+  for (const o of [0, 1, 2]) {
+    const roots = new Set(g.origin.flatMap((oo, i) => (oo === o ? [find(i)] : [])));
+    assert.equal(roots.size, 1, `street node ${o}: its walk nodes form ${roots.size} groups`);
+  }
+  assertConnectedPerStreetComponent(g, sg);
+  const on = carriagewayTest(sg);
+  for (const p of g.nodes) assert.ok(!on(p), `node on a carriageway ${p.x},${p.y}`);
+});
+
 test('walk_on: a street class not listed gets no walkway (alley, local)', () => {
   const sg = snapshot([[0, 0], [-100, 0], [100, 0], [0, 60]], [
     [1, 0, ...LOCAL], [0, 2, ...LOCAL], [0, 3, 'alley', 3.5, 0],
@@ -245,8 +268,9 @@ test('real area: stats', () => {
     `walk graph nodes=${graph.nodes.length} edges=${graph.edges.length} crossings=${crossings} ` +
       `alley=${count(graph, 'alley')} components=${new Set(components(graph)).size}`,
   );
-  assert.ok(graph.nodes.length > 1000);
-  assert.ok(crossings > 500);
+  // Act 1 strip (procedural map): 653 nodes, 246 crossings when written.
+  assert.ok(graph.nodes.length > 500);
+  assert.ok(crossings > 200);
 });
 
 test('real area: nodes on playable land, adjacency consistent, lengths exact', () => {
@@ -308,7 +332,7 @@ test('real area: every crossing is at an intersection, every interior intersecti
     const roots = new Set((localNodes.get(n.id) ?? []).map(find));
     assert.equal(roots.size, 1, `intersection ${n.id}: its corners form ${roots.size} groups (an arm without crossing)`);
   }
-  assert.ok(checked > 300, `checked ${checked}`);
+  assert.ok(checked > 70, `checked ${checked}`); // Act 1 strip: 86 when written
 });
 
 /** Uniform grid over boxes for brute-force-with-prefilter checks. */
@@ -437,8 +461,13 @@ test('otherEnd and pointOnEdge (synthetic and real graph)', () => {
 
 test('real area: a random walk with nextEdge visits many edges and never leaves the graph', () => {
   const rng = createRng(11);
-  let edge = 0;
-  let node = graph.edges[0]!.b;
+  // Start on the largest walk component (the strip also holds small pockets cut off by the highway).
+  const comp = components(graph);
+  const sizes = new Map<number, number>();
+  for (const c of comp) sizes.set(c, (sizes.get(c) ?? 0) + 1);
+  const biggest = [...sizes].sort((x, y) => y[1] - x[1] || x[0] - y[0])[0]![0];
+  let edge = graph.edges.findIndex((e) => comp[e.a] === biggest);
+  let node = graph.edges[edge]!.b;
   const visited = new Set<number>([edge]);
   for (let i = 0; i < 20000; i++) {
     const next = nextEdge(graph, edge, node, rng);

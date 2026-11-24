@@ -7,6 +7,7 @@ import { AVENUE_KINDS } from '../world/streets/region.ts';
 import { buildStreetSurfaces, ringOutline, STREET_LAYERS } from '../world/street-surface.ts';
 import type { TriSoup } from '../world/street-surface.ts';
 import type { CityBuilding } from '../world/streets/buildings.ts';
+import { isCityBlock } from '../world/streets/city.ts';
 import { courtLines, courtRect } from '../world/court-layout.ts';
 import {
   MARKER_HEIGHT,
@@ -23,8 +24,8 @@ import {
   triangulatePolygons,
 } from '../engine/meshes.ts';
 import type { GroundLayer, HeightSoup } from '../engine/meshes.ts';
-import type { RiverCourse } from '../world/layers/layer3-water.ts';
-import { coverAt, densityAt, layer1LandCover } from '../world/layers/layer1-land-cover.ts';
+import type { RiverCourse } from '../world/water.ts';
+import { coverAt, densityAt } from '../world/cover.ts';
 import { createWorldLabels } from '../ui/world-labels.ts';
 import type { WorldLabel } from '../ui/world-labels.ts';
 
@@ -104,7 +105,7 @@ export const worldView: GamePlugin = {
   name: 'world-view',
   dependsOn: ['world-data'],
   setup(ctx) {
-    const { spec, slice, streets, city, buildings, terrain, water } = ctx.services.get(WorldDataKey);
+    const { spec, slice, streets, city, buildings, terrain, water, cover } = ctx.services.get(WorldDataKey);
     const scene = ctx.view.scene;
     const t0 = performance.now();
 
@@ -114,7 +115,6 @@ export const worldView: GamePlugin = {
     const layers: GroundLayer[] = [];
 
     // Far ground: the whole isthmus outside the detailed rect below, on the far height grid, coloured by land cover.
-    const cover = layer1LandCover(spec);
     ctx.services.provide(LandCoverKey, cover);
     const bk = terrain.grid;
     const bakedRect = { minX: bk.x0, minY: bk.y0, maxX: bk.x0 + (bk.cols - 1) * bk.cell, maxY: bk.y0 + (bk.rows - 1) * bk.cell };
@@ -127,15 +127,14 @@ export const worldView: GamePlugin = {
     ].filter((r) => r.maxX > r.minX && r.maxY > r.minY);
     const farPolys = strips.flatMap((r) => clipLandToRect(spec.land, r));
     const farSoup = drapeSoup(triangulatePolygons(farPolys), heightAt, FAR_DRAPE);
-    scene.add(
-      farGroundMesh(farSoup, { heightAt, normalAt: (x, y) => terrain.normalAt(x, y) }, (x, y) => {
-        const base = PALETTE.cover[coverAt(cover, x, y)] ?? PALETTE.land;
-        // Denser jungle reads darker: shade by forest density (0.85 .. 1.15) so the canopy is not one flat tone.
-        const k = 0.85 + 0.3 * (1 - densityAt(cover, x, y));
-        const ch = (shift: number): number => Math.min(255, Math.round(((base >> shift) & 255) * k));
-        return (ch(16) << 16) | (ch(8) << 8) | ch(0);
-      }),
-    );
+    const coverColor = (x: number, y: number): number => {
+      const base = PALETTE.cover[coverAt(cover, x, y)] ?? PALETTE.land;
+      // Denser jungle reads darker: shade by forest density (0.85 .. 1.15) so the canopy is not one flat tone.
+      const k = 0.85 + 0.3 * (1 - densityAt(cover, x, y));
+      const ch = (shift: number): number => Math.min(255, Math.round(((base >> shift) & 255) * k));
+      return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+    };
+    scene.add(farGroundMesh(farSoup, { heightAt, normalAt: (x, y) => terrain.normalAt(x, y) }, coverColor));
 
     // Layer 3 water, whole isthmus: rivers follow their bed, Gatún Lake / canal reaches / lock chambers are flat at their levels,
     // lock aprons are grey slabs at the wall top, the chamber walls are grey blockout boxes. Rivers inside the detailed rect are
@@ -159,11 +158,11 @@ export const worldView: GamePlugin = {
     scene.add(surfaceMesh(aprons, PALETTE.lockApron, 'apron', 'lock-aprons'));
     for (const lock of water.locks) scene.add(lockWallsMesh(lock.chambers, lock.apronTop, `lock-walls:${lock.id}`));
 
-    // The land over the baked terrain (active rect + skirt); beyond it the flat land above stays.
+    // The land over the baked terrain (active rect + skirt), coloured by land cover like the far ground; city ground paints over it.
     const g = terrain.grid;
     const baked = { minX: g.x0, minY: g.y0, maxX: g.x0 + (g.cols - 1) * g.cell, maxY: g.y0 + (g.rows - 1) * g.cell };
     const landSoup = drapeSoup(triangulatePolygons(clipLandToRect(spec.land, baked)), heightAt, DRAPE.land);
-    layers.push({ soup: landSoup, y: 0, color: PALETTE.land });
+    layers.push({ soup: landSoup, y: 0, color: PALETTE.land, colorAt: coverColor });
 
     // Rivers inside the baked rect: flat ribbons draped on the carved bed, under the street layers.
     const riverLayer: TriSoup = { positions: [], indices: [] };
@@ -186,7 +185,7 @@ export const worldView: GamePlugin = {
     // Blocks: neutral ground; parks, court blocks and medians green.
     const groundColor = { park: PALETTE.park, median: PALETTE.median, court: PALETTE.park, commercial: PALETTE.blockGround, residential: PALETTE.blockGround };
     for (const color of new Set(Object.values(groundColor))) {
-      const blocks = streets.blocks.filter((b) => groundColor[city.landUse[b.id]?.use ?? 'residential'] === color);
+      const blocks = streets.blocks.filter((b) => isCityBlock(spec, b) && groundColor[city.landUse[b.id]?.use ?? 'residential'] === color);
       layers.push({ soup: triangulatePolygons(blocks.map((b) => ({ outer: b.ring, holes: b.holes }))), y: LAYER_Y.block, color });
     }
     // Court blocks: a court rectangle on the green (whole buildable part painted when none fits).

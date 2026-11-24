@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { HeightGrid } from '../src/world/terrain.ts';
+import type { HeightGrid } from '../src/world/height-grid.ts';
 import { COVER_MAP_COLORS, coverColor, gridHeight, hillshadeAt, pixelFrame, pixelToSpec, shadedCoverColor, shadeFactor, specToPixel } from '../src/sim/map-layers.ts';
 
 /** Plane z = a*x + b*y on a 20 x 20 grid of 10 m cells. */

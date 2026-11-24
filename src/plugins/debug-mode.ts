@@ -15,7 +15,7 @@ import {
   wheelSpeed,
   type FlyPose,
 } from '../sim/debug-fly.ts';
-import { coverAt } from '../world/layers/layer1-land-cover.ts';
+import { coverAt } from '../world/cover.ts';
 import { sceneToSpec } from '../world/coords.ts';
 import type { Vec2 } from '../world/vec.ts';
 

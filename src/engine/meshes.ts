@@ -139,11 +139,13 @@ export function landMesh(land: Vec2[], bounds = { width: 0, height: 0 }): Object
   return group;
 }
 
-/** One flat layer of a merged ground mesh: triangles (spec plane) at height y with one colour. */
+/** One flat layer of a merged ground mesh: triangles (spec plane) at height y with one colour (or one per vertex). */
 export interface GroundLayer {
   soup: TriSoup;
   y: number;
   color: number;
+  /** Per-vertex colour (spec plane); overrides `color`. */
+  colorAt?: (x: number, y: number) => number;
 }
 
 /** Terrain the ground is draped over: height (m) and unit normal (spec axes: x east, y north, z up). */
@@ -193,6 +195,7 @@ export function groundMesh(layers: readonly GroundLayer[], name = 'ground', surf
       } else {
         nor[v * 3 + 1] = 1;
       }
+      if (l.colorAt) c.setHex(l.colorAt(px, py));
       col[v * 3] = c.r;
       col[v * 3 + 1] = c.g;
       col[v * 3 + 2] = c.b;

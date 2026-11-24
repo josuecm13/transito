@@ -2,7 +2,7 @@ import { createServiceKey } from '../ecs/services.ts';
 import type { WorldData } from '../world/world-data.ts';
 import type { CameraMode, CameraSettings } from '../sim/camera-settings.ts';
 import type { Screens } from '../ui/screens.ts';
-import type { Layer1Output } from '../world/layers/layer1-land-cover.ts';
+import type { LandCover } from '../world/cover.ts';
 import type { Vec2 } from '../world/vec.ts';
 
 /** Shared service keys. Neutral module: plugins import keys from here, never from each other. */
@@ -33,7 +33,7 @@ export interface CameraControl {
 export const CameraControlKey = createServiceKey<CameraControl>('camera-control');
 
 /** Layer 1 (land cover), computed once by world-view and shared with the map screens. */
-export const LandCoverKey = createServiceKey<Layer1Output>('land-cover');
+export const LandCoverKey = createServiceKey<LandCover>('land-cover');
 
 /** What the debug HUD shows about the free camera (spec metres: x east, y north). */
 export interface DebugInfo {

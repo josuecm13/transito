@@ -8,38 +8,49 @@ import type { City } from './streets/city.ts';
 import { deriveCity } from './streets/city.ts';
 import type { CityBuilding } from './streets/buildings.ts';
 import type { StreetWalkGraph } from './walk-graph.ts';
-import { Terrain } from './terrain.ts';
 import { buildWalkGraph } from './walk-graph.ts';
-import { layer2Relief } from './layers/layer2-relief.ts';
-import { layer3Water } from './layers/layer3-water.ts';
-import type { Layer3Output } from './layers/layer3-water.ts';
+import type { LandCover } from './cover.ts';
+import { generateIsthmus, type Isthmus } from './proc/isthmus.ts';
+import { gameSpecFromIsthmus } from './proc/game-spec.ts';
+import { ProcTerrain, coverFromIsthmus, waterFromIsthmus, type GameWater } from './proc/game-world.ts';
 
 /**
  * Everything the plugins render, collide with and walk on. Built once, never regenerated.
  * `buildings` is `city.buildings` (CityBuilding is a superset of the blockout Building).
  */
 export type WorldData = {
+  /** The game spec: the authored spec with the active area, district grid, routes and Act 1 landmarks of the procedural map. */
   spec: WorldSpec;
   slice: WorldSlice;
   streets: StreetNetwork;
   city: City;
   buildings: CityBuilding[];
   walkGraph: StreetWalkGraph;
-  /** Ground height model shared by physics, rendering and every system that stands on the ground. */
-  terrain: Terrain;
-  /** Layer 3: derived rivers, canal, Gatún Lake, locks (and the carve already applied to `terrain`). */
-  water: Layer3Output;
+  /** Ground height model shared by physics, rendering and every system that stands on the ground (procedural height). */
+  terrain: ProcTerrain;
+  /** Lake surfaces and rivers of the procedural map (canal water and locks not carried over yet). */
+  water: GameWater;
+  /** Land cover of the procedural map, in the game's classes. */
+  cover: LandCover;
+  /** The generated isthmus everything above comes from. */
+  isthmus: Isthmus;
 };
 
-export function buildWorldData(rawYaml: string): WorldData {
-  const spec = parseWorldSpec(rawYaml);
+/**
+ * The world the game runs on (#12 2.5): the procedural isthmus (`generateIsthmus`, or `isthmus` when
+ * already generated, e.g. baked), with the street / city pipeline run on the Act 1 strip only.
+ */
+export function buildWorldData(rawYaml: string, isthmus?: Isthmus): WorldData {
+  const authored = parseWorldSpec(rawYaml);
+  const iso = isthmus ?? generateIsthmus(authored);
+  const { spec } = gameSpecFromIsthmus(authored, iso);
   const slice = sliceWorld(spec);
   const streets = generateStreets(spec, slice);
   const city = deriveCity(spec, slice, streets);
   const walkGraph = buildWalkGraph(streets.graph, slice.isPlayableLand, spec.population.pedestrians.walkOn);
-  // Layers 2-3 (whole isthmus): H0 baked once, rivers / canal / lake carved on top of it. Layer 1 is not needed numerically.
-  const layer2 = layer2Relief(spec, {});
-  const water = layer3Water(spec, { layer2 });
-  const terrain = new Terrain(spec, slice.rect, streets.graph, { layer2, layer3: water });
-  return { spec, slice, streets, city, buildings: city.buildings, walkGraph, terrain, water };
+  const g = spec.relief.grid;
+  const terrain = new ProcTerrain(iso.height, slice.rect, { cell: g.cell, margin: g.margin, farCell: g.far.cell, bounds: spec.bounds });
+  const water = waterFromIsthmus(iso, (x, y) => terrain.heightAt(x, y));
+  const cover = coverFromIsthmus(iso);
+  return { spec, slice, streets, city, buildings: city.buildings, walkGraph, terrain, water, cover, isthmus: iso };
 }
