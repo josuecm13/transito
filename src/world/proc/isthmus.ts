@@ -5,21 +5,21 @@
  *   → rivers (drainage area) + canal (cheapest excavation) → airport (flattest site)
  *   → main roads (slope cost) → towns (suitability + growth along roads) → land cover
  *
- * Authored inputs are coarse intent only (uplift zones, dam / lock / airport hints, town seeds and
- * target areas, route stops); every shape on the map is computed. Pure and deterministic.
+ * Authored inputs (`procedural:` in specs/map/world.yaml) are coarse intent only: uplift zones, dam /
+ * lock / airport hints, town seeds and target areas, route stops. Every shape on the map is computed.
+ * Pure and deterministic.
  */
-import type { WorldSpec } from '../spec.ts';
+import { AIRPORT_TERMINAL_STOP, type WorldSpec } from '../spec.ts';
 import type { Vec2 } from '../vec.ts';
 import { levelAirport, siteAirport, type AirportResult } from './airport.ts';
 import { classifyCover } from './cover.ts';
 import { cellAt, makeShape, mask, type FieldGrid, type MaskGrid } from './grid.ts';
 import { slopeField } from './hydrology.ts';
 import { floodReservoir, type LakeResult } from './lake.ts';
-import { AIRPORT, AIRPORT_TERMINAL, CANAL, COVER, DEFAULT_CELL, GROWTH, LAKE, RELIEF, RIVERS, ROAD_STOPS, ROADS, SUITABILITY, TOWNS, TRANSIT } from './params.ts';
 import { generateRelief, type ReliefResult } from './relief.ts';
 import type { Dot, RenderInput, Stroke } from './render.ts';
 import { nearRoads, routeRoads, type RoadsResult } from './roads.ts';
-import { growTowns, suitability, type GrowthResult } from './settlements.ts';
+import { growTowns, suitability, type GrowthResult, type TownSpec } from './settlements.ts';
 import { routeTransit, type TransitResult } from './transit.ts';
 import { extractRivers, routeCanal, type CanalResult, type RiverSegment } from './water.ts';
 
@@ -94,10 +94,11 @@ function clipOutside(rivers: readonly RiverSegment[], ring: readonly Vec2[]): Ri
 }
 
 export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): Isthmus {
-  const cell = opts.cell ?? DEFAULT_CELL;
+  const P = spec.procedural;
+  const cell = opts.cell ?? P.cell;
   const shape = makeShape(spec.bounds.width, spec.bounds.height, cell);
   const report: string[] = [];
-  const relief = generateRelief(shape, { land: spec.land, islands: spec.islands.map((i) => i.points) }, RELIEF);
+  const relief = generateRelief(shape, { land: spec.land, islands: spec.islands.map((i) => i.points) }, P.relief);
   let landN = 0;
   let maxH = 0;
   for (let i = 0; i < relief.land.data.length; i++) {
@@ -108,11 +109,11 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
   }
   report.push(`land ${((landN * cell * cell) / 1e6).toFixed(2)} km², max height ${maxH.toFixed(0)} m`);
 
-  const lake = floodReservoir(relief.height, relief.land, relief.distToSea, relief.routing, relief.area, LAKE);
+  const lake = floodReservoir(relief.height, relief.land, relief.distToSea, relief.routing, relief.area, P.lake);
   report.push(`lake ${lake.areaKm2.toFixed(2)} km² at ${lake.level.toFixed(1)} m; dam (${lake.dam.x.toFixed(0)}, ${lake.dam.y.toFixed(0)}), catchment ${lake.catchmentKm2.toFixed(2)} km²`);
 
-  const allRivers = extractRivers(shape, relief.land, lake.lake, relief.routing, relief.area, RIVERS);
-  const canal = routeCanal(relief.height, lake.lake, lake.level, lake.dam, CANAL);
+  const allRivers = extractRivers(shape, relief.land, lake.lake, relief.routing, relief.area, P.rivers);
+  const canal = routeCanal(relief.height, lake.lake, lake.level, lake.dam, P.canal);
   report.push(`rivers ${allRivers.length} segments; canal ${canal.centreline.length} pts`);
 
   // Final height: copy, carve the canal, level the airfield.
@@ -121,11 +122,11 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
   for (let i = 0; i < water.data.length; i++) water.data[i] = lake.lake.data[i] || canal.channel.data[i] ? 1 : 0;
   // Only large rivers rule out an airfield; small streams inside it are culverted (dropped below).
   const riverWide = strokeMask(relief.land, allRivers.filter((r) => r.areaKm2 >= 1.2).map((r) => ({ points: r.points, width: r.width + 60 })));
-  const airport = siteAirport(height, relief.land, water, riverWide, AIRPORT);
+  const airport = siteAirport(height, relief.land, water, riverWide, P.airport);
   const rivers = clipOutside(allRivers, airport.field);
   const riverMask = strokeMask(relief.land, rivers.map((r) => ({ points: r.points, width: r.width })));
   levelAirport(height, airport, 150);
-  for (let i = 0; i < height.data.length; i++) if (canal.channel.data[i] && !lake.lake.data[i]) height.data[i] = Math.min(height.data[i]!, lake.level - CANAL.depth);
+  for (let i = 0; i < height.data.length; i++) if (canal.channel.data[i] && !lake.lake.data[i]) height.data[i] = Math.min(height.data[i]!, lake.level - P.canal.depth);
   report.push(`airport at (${airport.centre.x.toFixed(0)}, ${airport.centre.y.toFixed(0)}), heading ${((Math.atan2(airport.dir.x, airport.dir.y) * 180) / Math.PI).toFixed(0)}°, spread ${airport.spread.toFixed(1)} m`);
 
   const wet = mask(shape);
@@ -140,17 +141,18 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
       const y = (gy + 0.5) * cell;
       blocked.data[i] = lake.lake.data[i] || insideRing({ x, y }, airport.field) ? 1 : 0;
     }
-  const S = ROAD_STOPS;
   const terminal = airport.terminal;
+  /** Resolves a stop id of `stops` (the parser checked it exists) or the reserved airport terminal. */
+  const stopOf = (stops: Readonly<Record<string, Vec2>>) => (id: string): Vec2 => (id === AIRPORT_TERMINAL_STOP ? terminal : stops[id]!);
+  const roadStop = stopOf(P.roads.stops);
+  const { grade, bridge, seaBridge, canalBridge, reuse } = P.roads;
   const roads = routeRoads(height, relief.land, blocked, wet, {
-    ...ROADS,
-    routes: [
-      { id: 'interamericana', kind: 'highway', stops: [S.balboa, S.city, terminal] },
-      { id: 'transistmica', kind: 'highway', stops: [S.cityNorth, S.colon] },
-      { id: 'gamboa-road', kind: 'road', stops: [S.city, S.gamboa] },
-      { id: 'coastal-avenue', kind: 'road', stops: [S.oldQuarter, S.city, S.pacifica] },
-      { id: 'railroad', kind: 'rail', stops: [S.balboa, S.gamboa, S.colon] },
-    ],
+    grade,
+    bridge,
+    seaBridge,
+    canalBridge,
+    reuse,
+    routes: P.roads.routes.map((rt) => ({ id: rt.id, kind: rt.kind, stops: rt.stops.map(roadStop) })),
   });
   report.push(`roads: ${roads.paths.map((r) => `${r.id} ${r.cells.length}`).join(', ')}`);
 
@@ -164,41 +166,57 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
       const y = (gy + 0.5) * cell - airport.centre.y;
       if (insideRing({ x: x + airport.centre.x, y: y + airport.centre.y }, airport.field)) unbuildable.data[gy * shape.w + gx] = 1;
     }
-  const suit = suitability(height, slope, relief.land, unbuildable, riverMask, relief.distToSea, SUITABILITY);
+  const suit = suitability(height, slope, relief.land, unbuildable, riverMask, relief.distToSea, P.suitability);
   const highways = mask(shape);
   for (const r of roads.paths) if (r.kind !== 'rail') for (const c of r.cells) highways.data[c] = 1;
-  // El Corredor: seeded along the Interamericana between the city stop and the airport terminal.
-  const ia = roads.paths.find((r) => r.id === 'interamericana')!;
-  // Nearest path cell to the city stop (stops are snapped to dry land, so match by distance).
-  let startK = 0;
-  let bestD = Number.POSITIVE_INFINITY;
-  ia.cells.forEach((c, k) => {
-    const d = Math.hypot(((c % shape.w) + 0.5) * cell - S.city.x, (Math.floor(c / shape.w) + 0.5) * cell - S.city.y);
-    if (d < bestD) {
-      bestD = d;
-      startK = k;
-    }
-  });
-  // Seeds and the road discount start past the middle of the city → airport stretch, so the ribbon
-  // grows out towards the airport instead of filling the city's own plain.
-  const corridorFrom = Math.floor(startK + (ia.cells.length - 1 - startK) * 0.45);
-  const corridorSeeds = [0.55, 0.75, 0.92].map((f) => {
-    const c = ia.cells[Math.floor(startK + (ia.cells.length - 1 - startK) * f)]!;
-    return { x: ((c % shape.w) + 0.5) * cell, y: (Math.floor(c / shape.w) + 0.5) * cell };
-  });
-  const townSpecs = TOWNS.map((t) => (t.id === 'el-corredor' ? { ...t, seeds: corridorSeeds } : t));
   const allRoads = nearRoads(highways, 90);
-  const corridorRoad = mask(shape);
-  for (const c of ia.cells.slice(corridorFrom)) corridorRoad.data[c] = 1;
-  const corridorNear = nearRoads(corridorRoad, 90);
-  const towns = growTowns(suit, townSpecs.map((t) => (t.id === 'el-corredor' ? corridorNear : allRoads)), { ...GROWTH, towns: townSpecs }, riverMask);
-  report.push(`towns: ${TOWNS.map((t, k) => `${t.id} ${towns.areasKm2[k]!.toFixed(2)}/${t.targetKm2}`).join(', ')} km²`);
+  // A town with `seedAlong` (El Corredor) is seeded along its route, from the `from` stop towards the
+  // route's end (the airport), and grows only near that stretch.
+  const seedAlong = (route: string, from: Vec2): { seeds: Vec2[]; near: MaskGrid } => {
+    const path = roads.paths.find((r) => r.id === route)!;
+    // Nearest path cell to the stop (stops are snapped to dry land, so match by distance).
+    let startK = 0;
+    let bestD = Number.POSITIVE_INFINITY;
+    path.cells.forEach((c, k) => {
+      const d = Math.hypot(((c % shape.w) + 0.5) * cell - from.x, (Math.floor(c / shape.w) + 0.5) * cell - from.y);
+      if (d < bestD) {
+        bestD = d;
+        startK = k;
+      }
+    });
+    // Seeds and the road discount start past the middle of the stretch, so the ribbon grows out
+    // towards the route's end instead of filling the plain around the stop.
+    const nearFrom = Math.floor(startK + (path.cells.length - 1 - startK) * 0.45);
+    const seeds = [0.55, 0.75, 0.92].map((f) => {
+      const c = path.cells[Math.floor(startK + (path.cells.length - 1 - startK) * f)]!;
+      return { x: ((c % shape.w) + 0.5) * cell, y: (Math.floor(c / shape.w) + 0.5) * cell };
+    });
+    const stretch = mask(shape);
+    for (const c of path.cells.slice(nearFrom)) stretch.data[c] = 1;
+    return { seeds, near: nearRoads(stretch, 90) };
+  };
+  const townSpecs: TownSpec[] = [];
+  const townNear: MaskGrid[] = [];
+  for (const t of P.towns.items) {
+    const along = t.seedAlong ? seedAlong(t.seedAlong.route, roadStop(t.seedAlong.from)) : undefined;
+    townSpecs.push({ id: t.id, seeds: along ? along.seeds : t.seeds, targetKm2: t.targetKm2, ...(t.roadAffinity !== undefined ? { roadAffinity: t.roadAffinity } : {}) });
+    townNear.push(along ? along.near : allRoads);
+  }
+  const { items: _items, ...growth } = P.towns;
+  const towns = growTowns(suit, townNear, { ...growth, towns: townSpecs }, riverMask);
+  report.push(`towns: ${townSpecs.map((t, k) => `${t.id} ${towns.areasKm2[k]!.toFixed(2)}/${t.targetKm2}`).join(', ')} km²`);
 
-  const cover = classifyCover(height, slope, relief.land, relief.distToSea, relief.area, towns.density, [airport.field], COVER);
+  const cover = classifyCover(height, slope, relief.land, relief.distToSea, relief.area, towns.density, [airport.field], P.cover);
 
+  const transitStop = stopOf(P.transit.stops);
+  const { offUrban, offRoad, grade: transitGrade, bridge: transitBridge, interchangeRadius } = P.transit;
   const transit = routeTransit(height, relief.land, blocked, wet, towns.density, highways, {
-    ...TRANSIT,
-    lines: TRANSIT.lines.map((l) => ({ ...l, branches: l.branches.map((b) => b.map((s) => (s === AIRPORT_TERMINAL ? terminal : s))) })),
+    offUrban,
+    offRoad,
+    grade: transitGrade,
+    bridge: transitBridge,
+    interchangeRadius,
+    lines: P.transit.lines.map((l) => ({ ...l, branches: l.branches.map((b) => b.map(transitStop)) })),
   });
   report.push(`transit: ${transit.lines.map((l) => l.id).join(', ')}; ${transit.stations.length} stations, ${transit.stations.filter((s) => s.interchange).length} interchanges`);
   return { relief, height, lake, rivers, canal, airport, roads, towns, cover, transit, report };

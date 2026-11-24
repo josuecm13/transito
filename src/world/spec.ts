@@ -1,6 +1,15 @@
 import { load } from 'js-yaml';
 import type { Vec2 } from './vec.ts';
 import { pointInPolygon } from './geometry.ts';
+import type { AirportParams } from './proc/airport.ts';
+import type { CoverParams } from './proc/cover.ts';
+import type { LakeParams } from './proc/lake.ts';
+import type { Octaves } from './proc/noise.ts';
+import type { ReliefParams, UpliftZone } from './proc/relief.ts';
+import type { RoadParams, RouteSpec } from './proc/roads.ts';
+import type { GrowthParams, SuitabilityParams } from './proc/settlements.ts';
+import type { TransitLineSpec, TransitParams } from './proc/transit.ts';
+import type { CanalParams, RiverParams } from './proc/water.ts';
 
 export type Range = readonly [number, number];
 
@@ -211,6 +220,54 @@ export interface WorldSpec {
   airports: AirportSpec[];
   /** Layer 5: main roads (main_roads:). */
   mainRoads: MainRoadsSpec;
+  /** Procedural isthmus inputs (procedural:), read by src/world/proc/isthmus.ts. */
+  procedural: ProceduralSpec;
+}
+
+/** Reserved stop id in procedural roads / transit: the generated airport's terminal. */
+export const AIRPORT_TERMINAL_STOP = 'airport-terminal';
+
+/** A main road or railroad of the procedural map; `stops` are ids of `procedural.roads.stops` (or the airport terminal). */
+export interface ProcRoute {
+  id: string;
+  kind: RouteSpec['kind'];
+  stops: string[];
+}
+
+export interface ProcTown {
+  id: string;
+  /** Explicit seeds; empty when the town is seeded along a route (`seedAlong`). */
+  seeds: Vec2[];
+  /** Seeded along `route`, from its stop `from` towards the route's end; grows only near that stretch. */
+  seedAlong?: { route: string; from: string };
+  targetKm2: number;
+  roadAffinity?: number;
+}
+
+/** A metro or rail line; each branch is a list of ids of `procedural.transit.stops` (or the airport terminal). */
+export interface ProcLine {
+  id: string;
+  name: string;
+  mode: TransitLineSpec['mode'];
+  color: [number, number, number];
+  branches: string[][];
+  stationSpacing: number;
+}
+
+/** procedural: in world.yaml. Same shapes as the generator parameters, with stops named instead of inlined. */
+export interface ProceduralSpec {
+  /** Default generation grid (m). */
+  cell: number;
+  relief: ReliefParams;
+  lake: LakeParams;
+  rivers: RiverParams;
+  canal: CanalParams;
+  airport: AirportParams;
+  roads: Omit<RoadParams, 'routes'> & { stops: Record<string, Vec2>; routes: ProcRoute[] };
+  suitability: SuitabilityParams;
+  towns: Omit<GrowthParams, 'towns'> & { items: ProcTown[] };
+  cover: CoverParams;
+  transit: Omit<TransitParams, 'lines'> & { stops: Record<string, Vec2>; lines: ProcLine[] };
 }
 
 export class WorldSpecError extends Error {
@@ -569,6 +626,7 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
   const waterBodies = parseWaterBodies(r, doc.water_bodies);
   const airports = parseAirports(r, doc.airports);
   const mainRoads = parseMainRoads(r, doc.main_roads);
+  const procedural = parseProcedural(r, doc.procedural, bounds);
 
   if (r.problems.length > 0) throw new WorldSpecError(r.problems);
 
@@ -595,6 +653,7 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
     waterBodies,
     airports,
     mainRoads,
+    procedural,
   };
 }
 
@@ -1663,4 +1722,383 @@ function parseMainRoads(r: Reader, raw: unknown): MainRoadsSpec {
     if (viaduct.road !== '' && (!vr || vr.structure !== 'viaduct')) r.problems.push(`${cp}.viaduct.road: "${viaduct.road}" is not a road with structure: viaduct`);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// procedural: inputs of the procedural isthmus (src/world/proc/). Strict keys everywhere.
+
+type NumRule = 'any' | 'pos' | 'nonneg' | 'frac' | 'int1';
+
+class ProcReader {
+  readonly r: Reader;
+  readonly bounds: { width: number; height: number };
+  constructor(r: Reader, bounds: { width: number; height: number }) {
+    this.r = r;
+    this.bounds = bounds;
+  }
+
+  /** A mapping with exactly `keys` allowed (`optional` may be absent). */
+  sec(v: unknown, path: string, keys: readonly string[], optional: readonly string[] = []): Obj | undefined {
+    const o = this.r.obj(v, path);
+    if (!o) return undefined;
+    this.r.exact(o, [...keys, ...optional], path);
+    for (const k of keys) if (o[k] === undefined) this.r.problems.push(`${path}.${k}: missing`);
+    return o;
+  }
+
+  num(o: Obj, key: string, path: string, rule: NumRule = 'any'): number {
+    const v = this.r.num(o, key, path);
+    if (Number.isNaN(v)) return v;
+    const p = `${path}.${key}`;
+    if (rule === 'pos' && !(v > 0)) this.r.problems.push(`${p}: must be > 0`);
+    if (rule === 'nonneg' && !(v >= 0)) this.r.problems.push(`${p}: must be >= 0`);
+    if (rule === 'frac' && !(v >= 0 && v <= 1)) this.r.problems.push(`${p}: expected a fraction in [0, 1]`);
+    if (rule === 'int1' && !(Number.isInteger(v) && v >= 1)) this.r.problems.push(`${p}: expected an integer >= 1`);
+    return v;
+  }
+
+  /** [a, b] with a < b. */
+  span(v: unknown, path: string): readonly [number, number] {
+    const [a, b] = this.r.pair(v, path);
+    if (!(a < b)) this.r.problems.push(`${path}: expected [min, max] with min < max`);
+    return [a, b];
+  }
+
+  /** A map point inside the bounds (edges included). */
+  at(v: unknown, path: string): Vec2 {
+    const p = this.r.point(v, path);
+    if (!(p.x >= 0 && p.x <= this.bounds.width && p.y >= 0 && p.y <= this.bounds.height)) this.r.problems.push(`${path}: (${p.x}, ${p.y}) is outside the map`);
+    return p;
+  }
+
+  ats(v: unknown, path: string, min: number): Vec2[] {
+    if (!Array.isArray(v)) {
+      this.r.problems.push(`${path}: expected a list of [x, y] points`);
+      return [];
+    }
+    if (v.length < min) this.r.problems.push(`${path}: needs at least ${min} points`);
+    return v.map((p, i) => this.at(p, `${path}[${i}]`));
+  }
+
+  octaves(v: unknown, path: string): Octaves {
+    const o = this.sec(v, path, ['wavelength', 'octaves'], ['gain', 'lacunarity']);
+    if (!o) return { wavelength: NaN, octaves: NaN };
+    const out: { wavelength: number; octaves: number; gain?: number; lacunarity?: number } = {
+      wavelength: this.num(o, 'wavelength', path, 'pos'),
+      octaves: this.num(o, 'octaves', path, 'int1'),
+    };
+    if (o.gain !== undefined) out.gain = this.num(o, 'gain', path, 'frac');
+    if (o.lacunarity !== undefined) {
+      out.lacunarity = this.num(o, 'lacunarity', path);
+      if (!(out.lacunarity > 1)) this.r.problems.push(`${path}.lacunarity: must be > 1`);
+    }
+    return out;
+  }
+
+  /** Unique ids across a list. */
+  unique(ids: readonly string[], path: string): void {
+    const seen = new Set<string>();
+    for (const id of ids) {
+      if (seen.has(id)) this.r.problems.push(`${path}: duplicate id '${id}'`);
+      seen.add(id);
+    }
+  }
+
+  /** `stops:` mapping of id -> point. The reserved airport terminal id may not be redefined. */
+  stops(v: unknown, path: string): Record<string, Vec2> {
+    const o = this.r.obj(v, path);
+    const out: Record<string, Vec2> = {};
+    if (!o) return out;
+    for (const [k, p] of Object.entries(o)) {
+      if (k === AIRPORT_TERMINAL_STOP) this.r.problems.push(`${path}.${k}: reserved stop id (the generated airport terminal)`);
+      out[k] = this.at(p, `${path}.${k}`);
+    }
+    if (Object.keys(out).length === 0) this.r.problems.push(`${path}: expected at least one stop`);
+    return out;
+  }
+
+  /** A list of stop refs, each a key of `stops` or the airport terminal. */
+  refs(v: unknown, path: string, stops: Record<string, Vec2>, min: number): string[] {
+    const list = strList(this.r, v, path);
+    if (list.length < min) this.r.problems.push(`${path}: needs at least ${min} stops`);
+    for (const s of list) if (s !== AIRPORT_TERMINAL_STOP && !(s in stops)) this.r.problems.push(`${path}: unknown stop '${s}'`);
+    return list;
+  }
+}
+
+function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; height: number }): ProceduralSpec {
+  const P = new ProcReader(r, bounds);
+  const path = 'procedural';
+  const o = P.sec(raw, path, ['cell', 'relief', 'lake', 'rivers', 'canal', 'airport', 'roads', 'suitability', 'towns', 'cover', 'transit']) ?? {};
+  const cell = o.cell === undefined ? NaN : P.num(o, 'cell', path, 'pos');
+  const roads = parseProcRoads(P, o.roads, `${path}.roads`);
+  return {
+    cell,
+    relief: parseProcRelief(P, o.relief, `${path}.relief`),
+    lake: parseProcLake(P, o.lake, `${path}.lake`),
+    rivers: parseProcRivers(P, o.rivers, `${path}.rivers`),
+    canal: parseProcCanal(P, o.canal, `${path}.canal`),
+    airport: parseProcAirport(P, o.airport, `${path}.airport`),
+    roads,
+    suitability: parseProcSuitability(P, o.suitability, `${path}.suitability`),
+    towns: parseProcTowns(P, o.towns, `${path}.towns`, roads.routes),
+    cover: parseProcCover(P, o.cover, `${path}.cover`),
+    transit: parseProcTransit(P, o.transit, `${path}.transit`),
+  };
+}
+
+function parseProcRelief(P: ProcReader, raw: unknown, path: string): ReliefParams {
+  const keys = ['seed', 'background', 'zones', 'modulation', 'coast_taper', 'coast_wobble', 'erosion', 'peak', 'peak_quantile', 'sea_floor', 'hummocks'];
+  const o = P.sec(raw, path, keys) ?? {};
+  const zones = listOf(P.r, o.zones, `${path}.zones`).flatMap((z, i): UpliftZone[] => {
+    const p = `${path}.zones[${i}]`;
+    const kind = P.r.obj(z, p)?.kind;
+    if (kind === 'line') {
+      const zo = P.sec(z, p, ['id', 'kind', 'points', 'width', 'rate']);
+      if (!zo) return [];
+      return [{ id: P.r.str(zo, 'id', p), kind, points: P.ats(zo.points, `${p}.points`, 2), width: P.num(zo, 'width', p, 'pos'), rate: P.num(zo, 'rate', p, 'nonneg') }];
+    }
+    if (kind === 'disc') {
+      const zo = P.sec(z, p, ['id', 'kind', 'at', 'radius', 'rate']);
+      if (!zo) return [];
+      return [{ id: P.r.str(zo, 'id', p), kind, at: P.at(zo.at, `${p}.at`), radius: P.num(zo, 'radius', p, 'pos'), rate: P.num(zo, 'rate', p, 'nonneg') }];
+    }
+    P.r.problems.push(`${p}.kind: expected line or disc`);
+    return [];
+  });
+  P.unique(zones.map((z) => z.id), `${path}.zones`);
+  const mp = `${path}.modulation`;
+  const m = P.sec(o.modulation, mp, ['lo', 'hi', 'octaves', 'warp', 'grain_deg', 'grain_ratio']) ?? {};
+  const lo = P.num(m, 'lo', mp, 'nonneg');
+  const hi = P.num(m, 'hi', mp);
+  if (!(hi > lo)) P.r.problems.push(`${mp}.hi: must be > lo`);
+  const wp = `${path}.coast_wobble`;
+  const wob = P.sec(o.coast_wobble, wp, ['amplitude', 'octaves']) ?? {};
+  const ep = `${path}.erosion`;
+  const er = P.sec(o.erosion, ep, ['iterations', 'k', 'm', 'dt', 'diffusion']) ?? {};
+  const diffusion = P.num(er, 'diffusion', ep, 'nonneg');
+  if (diffusion > 0.2) P.r.problems.push(`${ep}.diffusion: must be <= 0.2 (explicit step stability)`);
+  const sp = `${path}.sea_floor`;
+  const sf = P.sec(o.sea_floor, sp, ['shore', 'slope']) ?? {};
+  const hp = `${path}.hummocks`;
+  const hm = P.sec(o.hummocks, hp, ['amplitude', 'octaves', 'inland', 'max_slope']) ?? {};
+  const peakQuantile = P.num(o, 'peak_quantile', path);
+  if (!(peakQuantile > 0 && peakQuantile < 1)) P.r.problems.push(`${path}.peak_quantile: expected 0 < q < 1`);
+  return {
+    seed: P.num(o, 'seed', path),
+    background: P.num(o, 'background', path, 'nonneg'),
+    zones,
+    modulation: {
+      lo,
+      hi,
+      octaves: P.octaves(m.octaves, `${mp}.octaves`),
+      warp: P.num(m, 'warp', mp, 'nonneg'),
+      grainDeg: P.num(m, 'grain_deg', mp),
+      grainRatio: P.num(m, 'grain_ratio', mp, 'pos'),
+    },
+    coastTaper: P.num(o, 'coast_taper', path, 'pos'),
+    coastWobble: { amplitude: P.num(wob, 'amplitude', wp, 'nonneg'), octaves: P.octaves(wob.octaves, `${wp}.octaves`) },
+    erosion: { iterations: P.num(er, 'iterations', ep, 'int1'), k: P.num(er, 'k', ep, 'pos'), m: P.num(er, 'm', ep, 'pos'), dt: P.num(er, 'dt', ep, 'pos'), diffusion },
+    peak: P.num(o, 'peak', path, 'pos'),
+    peakQuantile,
+    seaFloor: { shore: P.num(sf, 'shore', sp, 'nonneg'), slope: P.num(sf, 'slope', sp, 'pos') },
+    hummocks: {
+      amplitude: P.num(hm, 'amplitude', hp, 'nonneg'),
+      octaves: P.octaves(hm.octaves, `${hp}.octaves`),
+      inland: P.span(hm.inland, `${hp}.inland`),
+      maxSlope: P.num(hm, 'max_slope', hp, 'pos'),
+    },
+  };
+}
+
+function parseProcLake(P: ProcReader, raw: unknown, path: string): LakeParams {
+  const o = P.sec(raw, path, ['dam_hint', 'snap_radius', 'min_inland', 'frame_margin', 'target_km2']) ?? {};
+  return {
+    damHint: P.at(o.dam_hint, `${path}.dam_hint`),
+    snapRadius: P.num(o, 'snap_radius', path, 'pos'),
+    minInland: P.num(o, 'min_inland', path, 'nonneg'),
+    frameMargin: P.num(o, 'frame_margin', path, 'nonneg'),
+    targetKm2: P.num(o, 'target_km2', path, 'pos'),
+  };
+}
+
+function parseProcRivers(P: ProcReader, raw: unknown, path: string): RiverParams {
+  const o = P.sec(raw, path, ['min_area_km2', 'width_per_sqrt_km2', 'max_width']) ?? {};
+  return { minAreaKm2: P.num(o, 'min_area_km2', path, 'pos'), widthPerSqrtKm2: P.num(o, 'width_per_sqrt_km2', path, 'pos'), maxWidth: P.num(o, 'max_width', path, 'pos') };
+}
+
+function parseProcCanal(P: ProcReader, raw: unknown, path: string): CanalParams {
+  const o = P.sec(raw, path, ['caribbean', 'pacific_locks', 'pacific', 'width', 'depth', 'dig_weight']) ?? {};
+  return {
+    caribbean: P.at(o.caribbean, `${path}.caribbean`),
+    pacificLocks: P.at(o.pacific_locks, `${path}.pacific_locks`),
+    pacific: P.at(o.pacific, `${path}.pacific`),
+    width: P.num(o, 'width', path, 'pos'),
+    depth: P.num(o, 'depth', path, 'pos'),
+    digWeight: P.num(o, 'dig_weight', path, 'nonneg'),
+  };
+}
+
+function parseProcAirport(P: ProcReader, raw: unknown, path: string): AirportParams {
+  const keys = ['hint', 'radius', 'runway_length', 'runway_spacing', 'runway_width', 'margin', 'distance_weight', 'heading_range', 'apron', 'edge_margin', 'towards', 'culvert_penalty'];
+  const o = P.sec(raw, path, keys) ?? {};
+  const headingRange = P.span(o.heading_range, `${path}.heading_range`);
+  if (!(headingRange[0] >= 0 && headingRange[1] <= 180)) P.r.problems.push(`${path}.heading_range: expected degrees within [0, 180]`);
+  const ap = `${path}.apron`;
+  const apron = P.sec(o.apron, ap, ['length', 'depth', 'building']) ?? {};
+  const building = P.r.pair(apron.building, `${ap}.building`);
+  if (!(building[0] > 0 && building[1] > 0)) P.r.problems.push(`${ap}.building: expected [length, depth] > 0`);
+  const runwayWidth = P.num(o, 'runway_width', path, 'pos');
+  const runwaySpacing = P.num(o, 'runway_spacing', path, 'pos');
+  if (!(runwaySpacing > runwayWidth)) P.r.problems.push(`${path}.runway_spacing: must be > runway_width (runways would overlap)`);
+  return {
+    hint: P.at(o.hint, `${path}.hint`),
+    radius: P.num(o, 'radius', path, 'pos'),
+    runwayLength: P.num(o, 'runway_length', path, 'pos'),
+    runwaySpacing,
+    runwayWidth,
+    margin: P.num(o, 'margin', path, 'nonneg'),
+    distanceWeight: P.num(o, 'distance_weight', path, 'nonneg'),
+    culvertPenalty: P.num(o, 'culvert_penalty', path, 'nonneg'),
+    towards: P.at(o.towards, `${path}.towards`),
+    headingRange,
+    apron: { length: P.num(apron, 'length', ap, 'pos'), depth: P.num(apron, 'depth', ap, 'pos'), building },
+    edgeMargin: P.num(o, 'edge_margin', path, 'nonneg'),
+  };
+}
+
+const ROUTE_KINDS: readonly RouteSpec['kind'][] = ['highway', 'road', 'rail'];
+
+function parseProcRoads(P: ProcReader, raw: unknown, path: string): ProceduralSpec['roads'] {
+  const o = P.sec(raw, path, ['grade', 'bridge', 'sea_bridge', 'canal_bridge', 'reuse', 'stops', 'routes']) ?? {};
+  const gp = `${path}.grade`;
+  const g = P.sec(o.grade, gp, ROUTE_KINDS) ?? {};
+  const grade = Object.fromEntries(
+    ROUTE_KINDS.map((k) => {
+      const kp = `${gp}.${k}`;
+      const go = P.sec(g[k], kp, ['g0', 'k', 'max_grade']) ?? {};
+      return [k, { g0: P.num(go, 'g0', kp, 'pos'), k: P.num(go, 'k', kp, 'pos'), maxGrade: P.num(go, 'max_grade', kp, 'pos') }];
+    }),
+  ) as RoadParams['grade'];
+  const stops = P.stops(o.stops, `${path}.stops`);
+  const routes = listOf(P.r, o.routes, `${path}.routes`).flatMap((raw2, i): ProcRoute[] => {
+    const p = `${path}.routes[${i}]`;
+    const ro = P.sec(raw2, p, ['id', 'kind', 'stops']);
+    if (!ro) return [];
+    const kind = P.r.str(ro, 'kind', p) as RouteSpec['kind'];
+    if (!ROUTE_KINDS.includes(kind)) P.r.problems.push(`${p}.kind: expected ${ROUTE_KINDS.join(', ')}`);
+    return [{ id: P.r.str(ro, 'id', p), kind, stops: P.refs(ro.stops, `${p}.stops`, stops, 2) }];
+  });
+  P.unique(routes.map((rt) => rt.id), `${path}.routes`);
+  return {
+    grade,
+    bridge: P.num(o, 'bridge', path, 'pos'),
+    seaBridge: P.num(o, 'sea_bridge', path, 'pos'),
+    canalBridge: P.num(o, 'canal_bridge', path, 'pos'),
+    reuse: P.num(o, 'reuse', path, 'pos'),
+    stops,
+    routes,
+  };
+}
+
+function parseProcSuitability(P: ProcReader, raw: unknown, path: string): SuitabilityParams {
+  const o = P.sec(raw, path, ['max_slope', 'height_band', 'coast_fade', 'coast_range', 'crossing']) ?? {};
+  return {
+    maxSlope: P.num(o, 'max_slope', path, 'pos'),
+    heightBand: P.span(o.height_band, `${path}.height_band`),
+    coastFade: P.num(o, 'coast_fade', path, 'frac'),
+    coastRange: P.num(o, 'coast_range', path, 'pos'),
+    crossing: P.num(o, 'crossing', path, 'frac'),
+  };
+}
+
+function parseProcTowns(P: ProcReader, raw: unknown, path: string, routes: readonly ProcRoute[]): ProceduralSpec['towns'] {
+  const o = P.sec(raw, path, ['road_discount', 'jitter', 'jitter_wavelength', 'min_suitability', 'seed_snap', 'seed', 'items']) ?? {};
+  const items = listOf(P.r, o.items, `${path}.items`).flatMap((raw2, i): ProcTown[] => {
+    const p = `${path}.items[${i}]`;
+    const t = P.sec(raw2, p, ['id', 'target_km2'], ['seeds', 'seed_along', 'road_affinity']);
+    if (!t) return [];
+    const town: ProcTown = { id: P.r.str(t, 'id', p), seeds: [], targetKm2: P.num(t, 'target_km2', p, 'pos') };
+    if ((t.seeds === undefined) === (t.seed_along === undefined)) P.r.problems.push(`${p}: expected exactly one of seeds, seed_along`);
+    if (t.seeds !== undefined) town.seeds = P.ats(t.seeds, `${p}.seeds`, 1);
+    if (t.seed_along !== undefined) {
+      const sp = `${p}.seed_along`;
+      const sa = P.sec(t.seed_along, sp, ['route', 'from']);
+      if (sa) {
+        const along = { route: P.r.str(sa, 'route', sp), from: P.r.str(sa, 'from', sp) };
+        const rt = routes.find((x) => x.id === along.route);
+        if (!rt) P.r.problems.push(`${sp}.route: unknown route '${along.route}'`);
+        else if (rt.kind === 'rail') P.r.problems.push(`${sp}.route: '${along.route}' is a railroad; towns grow along roads`);
+        else if (along.from === AIRPORT_TERMINAL_STOP || !rt.stops.includes(along.from)) P.r.problems.push(`${sp}.from: '${along.from}' is not a named stop of route '${along.route}'`);
+        town.seedAlong = along;
+      }
+    }
+    if (t.road_affinity !== undefined) town.roadAffinity = P.num(t, 'road_affinity', p, 'pos');
+    return [town];
+  });
+  P.unique(items.map((t) => t.id), `${path}.items`);
+  if (items.length > 254) P.r.problems.push(`${path}.items: at most 254 towns (owner ids are bytes)`);
+  return {
+    roadDiscount: P.num(o, 'road_discount', path, 'pos'),
+    jitter: P.num(o, 'jitter', path, 'nonneg'),
+    jitterWavelength: P.num(o, 'jitter_wavelength', path, 'pos'),
+    minSuitability: P.num(o, 'min_suitability', path, 'frac'),
+    seedSnap: P.num(o, 'seed_snap', path, 'nonneg'),
+    seed: P.num(o, 'seed', path),
+    items,
+  };
+}
+
+function parseProcCover(P: ProcReader, raw: unknown, path: string): CoverParams {
+  const o = P.sec(raw, path, ['seed', 'beach_width', 'mangrove', 'clearing', 'high_forest']) ?? {};
+  const mp = `${path}.mangrove`;
+  const m = P.sec(o.mangrove, mp, ['max_height', 'river_area_km2', 'reach']) ?? {};
+  const cp = `${path}.clearing`;
+  const c = P.sec(o.clearing, cp, ['wavelength', 'threshold', 'lowland_bonus', 'fringe_bonus']) ?? {};
+  const hp = `${path}.high_forest`;
+  const h = P.sec(o.high_forest, hp, ['height', 'slope']) ?? {};
+  return {
+    seed: P.num(o, 'seed', path),
+    beachWidth: P.num(o, 'beach_width', path, 'nonneg'),
+    mangrove: { maxHeight: P.num(m, 'max_height', mp, 'pos'), riverAreaKm2: P.num(m, 'river_area_km2', mp, 'pos'), reach: P.num(m, 'reach', mp, 'nonneg') },
+    clearing: {
+      wavelength: P.num(c, 'wavelength', cp, 'pos'),
+      threshold: P.num(c, 'threshold', cp, 'frac'),
+      lowlandBonus: P.num(c, 'lowland_bonus', cp, 'nonneg'),
+      fringeBonus: P.num(c, 'fringe_bonus', cp, 'nonneg'),
+    },
+    highForest: { height: P.num(h, 'height', hp, 'pos'), slope: P.num(h, 'slope', hp, 'pos') },
+  };
+}
+
+const LINE_MODES: readonly TransitLineSpec['mode'][] = ['metro', 'rail'];
+
+function parseProcTransit(P: ProcReader, raw: unknown, path: string): ProceduralSpec['transit'] {
+  const o = P.sec(raw, path, ['stops', 'lines', 'off_urban', 'off_road', 'grade', 'bridge', 'interchange_radius']) ?? {};
+  const stops = P.stops(o.stops, `${path}.stops`);
+  const lines = listOf(P.r, o.lines, `${path}.lines`).flatMap((raw2, i): ProcLine[] => {
+    const p = `${path}.lines[${i}]`;
+    const l = P.sec(raw2, p, ['id', 'name', 'mode', 'color', 'branches', 'station_spacing']);
+    if (!l) return [];
+    const mode = P.r.str(l, 'mode', p) as TransitLineSpec['mode'];
+    if (!LINE_MODES.includes(mode)) P.r.problems.push(`${p}.mode: expected ${LINE_MODES.join(', ')}`);
+    const col = l.color;
+    const color: [number, number, number] = Array.isArray(col) && col.length === 3 && col.every((c) => Number.isInteger(c) && c >= 0 && c <= 255) ? [col[0], col[1], col[2]] : [NaN, NaN, NaN];
+    if (Number.isNaN(color[0])) P.r.problems.push(`${p}.color: expected [r, g, b] integers 0-255`);
+    const branches = listOf(P.r, l.branches, `${p}.branches`).map((b, j) => P.refs(b, `${p}.branches[${j}]`, stops, 2));
+    if (branches.length === 0) P.r.problems.push(`${p}.branches: expected at least one branch`);
+    return [{ id: P.r.str(l, 'id', p), name: P.r.str(l, 'name', p), mode, color, branches, stationSpacing: P.num(l, 'station_spacing', p, 'pos') }];
+  });
+  P.unique(lines.map((l) => l.id), `${path}.lines`);
+  const gp = `${path}.grade`;
+  const g = P.sec(o.grade, gp, LINE_MODES) ?? {};
+  return {
+    stops,
+    lines,
+    offUrban: P.num(o, 'off_urban', path, 'pos'),
+    offRoad: P.num(o, 'off_road', path, 'pos'),
+    grade: { metro: P.num(g, 'metro', gp, 'pos'), rail: P.num(g, 'rail', gp, 'pos') },
+    bridge: P.num(o, 'bridge', path, 'pos'),
+    interchangeRadius: P.num(o, 'interchange_radius', path, 'pos'),
+  };
 }

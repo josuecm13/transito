@@ -545,3 +545,159 @@ population:
     # pedestrians use: sidewalks on both sides; alleys (no sidewalk) are walked on their centerline.
     # A class not listed gets no walkway (pedestrians only cross it). Issue #7: all streets.
     walk_on: [avenue, collector, local, alley]
+
+# Procedural isthmus (src/world/proc/, `npm run isthmus`). Coarse intent only: where rock rises,
+# where the dam / locks / airport are searched, town seeds and target areas, route and line stops.
+# Every shape (relief, lake, rivers, canal, airfield, roads, towns, cover, tracks) is derived from
+# these values and geometry.land. Positions in map metres (origin SW, +x east, +y north).
+# This replaces the authored layers above (relief .. main_roads) once the game reads it (#12).
+procedural:
+  cell: 20                      # m, default generation grid
+  relief:
+    seed: 7
+    background: 0.04            # uplift rate where no zone applies
+    # Uplift zones: `line` (polyline + width) or `disc` (centre + radius); `rate` scales the uplift.
+    zones:
+      # La Cordillera: the main range across the north-east, highest along a SW-NE spine.
+      - { id: cordillera, kind: line, points: [[2900, 6000], [4100, 5600], [5200, 5200], [6000, 4900]], width: 1600, rate: 1.0 }
+      # Its southern spurs, falling towards the corridor and the east edge.
+      - { id: cordillera-south, kind: line, points: [[4300, 5000], [5200, 4000], [5800, 2900]], width: 1000, rate: 0.65 }
+      # Hills between the lake and the city, joined to the range: the Transístmica crosses them.
+      - { id: central-hills, kind: line, points: [[2000, 3300], [3200, 3700], [4300, 4500]], width: 1000, rate: 0.45 }
+      # Highland link from the central hills to the range: closes the lake basin on the east, so the
+      # eastern valleys drain south across the corridor and the Transístmica crosses hills east of the lake.
+      - { id: east-rim, kind: line, points: [[2700, 3600], [3100, 4600], [3100, 5700]], width: 900, rate: 0.4 }
+      # Continental divide west of the city: separates the lake basin from the Pacific (the canal cuts it).
+      - { id: divide-west, kind: line, points: [[0, 2800], [1100, 3000], [2100, 3250]], width: 750, rate: 0.5 }
+      # Low hills west of the canal.
+      - { id: west-hills, kind: line, points: [[200, 6000], [250, 4500], [350, 3300], [600, 1900]], width: 800, rate: 0.45 }
+      # Dissected hills of the lake basin: flooding later turns their tops into islands.
+      - { id: lake-basin, kind: disc, at: [1400, 5200], radius: 1800, rate: 0.14 }
+    # Noise modulation of the uplift: rate *= lo + (hi - lo) * ridged(warped p).
+    modulation:
+      lo: 0.45
+      hi: 1.45
+      octaves: { wavelength: 1400, octaves: 5, gain: 0.55 }
+      warp: 450                 # m
+      grain_deg: 25             # dominant ridge direction, degrees
+      grain_ratio: 1.8          # stretch along the grain
+    coast_taper: 900            # m, uplift fades to zero over this distance from the sea (coastal plains)
+    coast_wobble: { amplitude: 35, octaves: { wavelength: 260, octaves: 4, gain: 0.55 } }   # m, coastline signed-distance noise
+    erosion: { iterations: 160, k: 0.05, m: 0.45, dt: 6, diffusion: 0.12 }                   # stream power + hillslope diffusion
+    peak: 420                   # m, this quantile of land cells is scaled to `peak`
+    peak_quantile: 0.995
+    sea_floor: { shore: 2, slope: 0.035 }   # m deep at the shore, m/m offshore
+    # Low hills on inland valley floors, added after erosion; flooding turns their tops into islands.
+    hummocks: { amplitude: 120, octaves: { wavelength: 260, octaves: 3, gain: 0.5 }, inland: [700, 1800], max_slope: 0.25 }
+  # Gatún-style reservoir: dam on the main river near the Atlantic locks, flooded to the target area.
+  lake:
+    dam_hint: [650, 6250]
+    snap_radius: 1000           # m, search for the largest drainage area around the hint
+    min_inland: 450             # m, the dam stays this far from the sea
+    frame_margin: 0             # m, the lake stays this far from the map frame
+    target_km2: 5
+  rivers:
+    min_area_km2: 0.4           # drainage area of the smallest drawn channel
+    width_per_sqrt_km2: 5       # m, width = a * sqrt(area km²)
+    max_width: 22               # m
+  # The canal: Caribbean entrance -> dam (Atlantic locks) -> lake -> lowest pass -> Pacific locks -> Pacific.
+  canal:
+    caribbean: [700, 7500]      # sea point where the canal starts
+    pacific_locks: [1400, 1500] # where it steps down to the Pacific
+    pacific: [1300, 200]        # sea point where it ends
+    width: 110                  # m
+    depth: 12                   # m below its water level
+    dig_weight: 0.08            # excavation cost per metre of ground above the water level
+  # Tocumen-style airfield: searched near the east end of the corridor. Compressed like the city
+  # (~1:2.5 of Tocumen's 3,056 m): two close parallel runways, a slim field.
+  airport:
+    hint: [5250, 2000]
+    radius: 900                 # m, search radius around the hint
+    runway_length: 1200         # m
+    runway_spacing: 260         # m between the two parallel runways
+    runway_width: 40            # m
+    margin: 50                  # m around the runways that must also be dry and flat
+    distance_weight: 0.03       # penalty per metre from the hint, in metres of height spread
+    heading_range: [0, 50]      # degrees clockwise from north
+    apron: { length: 520, depth: 110, building: [300, 45] }   # m
+    edge_margin: 200            # m inside the map frame
+    towards: [2900, 1300]       # the terminal sits on this side (the city)
+    culvert_penalty: 400        # m, score penalty for a field made entirely of river cells
+  # Main roads and the old railroad, by stops; geometry comes from slope-cost routing.
+  # `airport-terminal` (reserved) is the generated airport's terminal.
+  roads:
+    grade:                      # grade scale g0, weight k; max_grade blocks steeper edges
+      highway: { g0: 0.06, k: 3, max_grade: 0.3 }
+      road: { g0: 0.08, k: 2, max_grade: 0.35 }
+      rail: { g0: 0.03, k: 6, max_grade: 0.2 }
+    bridge: 25                  # cost multiplier on a river cell
+    sea_bridge: 250             # on a sea cell (causeway)
+    canal_bridge: 120           # on a canal cell
+    reuse: 0.35                 # on a cell already used by an earlier route of the same mode
+    stops:
+      colon: [1900, 6950]
+      city: [2900, 1300]
+      city-north: [3100, 2000]
+      old-quarter: [2420, 420]
+      pacifica: [3850, 800]
+      balboa: [900, 1250]
+      gamboa: [1450, 3600]
+    routes:
+      - { id: interamericana, kind: highway, stops: [balboa, city, airport-terminal] }
+      - { id: transistmica, kind: highway, stops: [city-north, colon] }
+      - { id: gamboa-road, kind: road, stops: [city, gamboa] }
+      - { id: coastal-avenue, kind: road, stops: [old-quarter, city, pacifica] }
+      - { id: railroad, kind: rail, stops: [balboa, gamboa, colon] }
+  # Where towns may grow: slope / height / coast preference; rivers are crossable at low suitability.
+  suitability:
+    max_slope: 0.22             # m/m where suitability reaches 0
+    height_band: [60, 160]      # m: starts falling at the first, 0 at the second
+    coast_fade: 0.55
+    coast_range: 2500           # m
+    crossing: 0.15              # suitability of river cells
+  # Towns grow by cost distance from their seeds, cheaper near main roads, until their target area.
+  towns:
+    road_discount: 0.3          # step-cost multiplier near a main road
+    jitter: 2.2
+    jitter_wavelength: 220      # m
+    min_suitability: 0.12
+    seed_snap: 450              # m, seeds move to the most suitable cell within this radius
+    seed: 13
+    items:
+      - { id: la-ciudad, seeds: [[2450, 450], [2950, 1250]], target_km2: 3.3 }
+      - { id: colon, seeds: [[1900, 7250]], target_km2: 1.1 }
+      - { id: balboa, seeds: [[850, 1150]], target_km2: 0.7 }
+      # Seeded along the route from the stop towards its end (the airport), and grows only near
+      # that stretch: a ribbon instead of a second city.
+      - { id: el-corredor, seed_along: { route: interamericana, from: city }, target_km2: 1.3, road_affinity: 3 }
+      - { id: gamboa, seeds: [[1420, 3050]], target_km2: 0.1 }
+  cover:
+    seed: 19
+    beach_width: 25             # m
+    mangrove: { max_height: 4, river_area_km2: 3, reach: 140 }
+    clearing: { wavelength: 300, threshold: 0.5, lowland_bonus: 0.3, fringe_bonus: 0.7 }
+    high_forest: { height: 230, slope: 0.4 }
+  # Metro de la Ciudad and the interoceanic railway (director's sketch, 2026-11-22). Stops are
+  # terminals, interchanges and via points; tracks and the stations between stops are derived.
+  # `airport-terminal` (reserved) is the generated airport's terminal.
+  transit:
+    stops:
+      old-quarter-tip: [2380, 320]
+      casco: [2560, 760]
+      north: [3050, 2050]
+      west-junction: [2150, 1450]
+      west-north: [2050, 1950]
+      balboa: [850, 1150]
+      bay-east: [3800, 950]
+      colon: [1900, 7100]
+    lines:
+      - { id: linea-1, name: "Línea 1", mode: metro, color: [214, 40, 40], branches: [[old-quarter-tip, casco, north]], station_spacing: 500 }
+      # Two branches without a shared stop: one line or two is an open director decision (#12).
+      - { id: linea-2, name: "Línea 2", mode: metro, color: [52, 178, 74], branches: [[balboa, casco, bay-east], [north, airport-terminal]], station_spacing: 650 }
+      - { id: linea-3, name: "Línea 3", mode: metro, color: [236, 196, 40], branches: [[casco, west-junction, north], [west-junction, west-north]], station_spacing: 500 }
+      - { id: ferrocarril, name: "Ferrocarril Interoceánico", mode: rail, color: [150, 96, 196], branches: [[north, colon]], station_spacing: 1000 }
+    off_urban: 2.5              # metro cost multiplier off built-up ground
+    off_road: 1.8               # rail cost multiplier away from main roads
+    grade: { metro: 0.06, rail: 0.04 }
+    bridge: 6
+    interchange_radius: 90      # m, stops of different lines closer than this are one station

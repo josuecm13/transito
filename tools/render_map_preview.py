@@ -820,14 +820,231 @@ def render(w):
     return "\n".join(out)
 
 
+# --- procedural: inputs of the procedural isthmus (mirror of parseProcedural in src/world/spec.ts) ---
+# Rules: num, pos (> 0), nonneg, frac ([0, 1]), int1 (integer >= 1), pt (map point), span ([min < max]),
+# pair, str, octaves, a nested dict, or a callable for lists. A leading "?" marks an optional key.
+AIRPORT_TERMINAL_STOP = "airport-terminal"
+OCTAVES = {"wavelength": "pos", "octaves": "int1", "?gain": "frac", "?lacunarity": "num"}
+PROC_SCHEMA = {
+    "cell": "pos",
+    "relief": {
+        "seed": "num", "background": "nonneg", "zones": "list",
+        "modulation": {"lo": "nonneg", "hi": "num", "octaves": OCTAVES, "warp": "nonneg", "grain_deg": "num", "grain_ratio": "pos"},
+        "coast_taper": "pos", "coast_wobble": {"amplitude": "nonneg", "octaves": OCTAVES},
+        "erosion": {"iterations": "int1", "k": "pos", "m": "pos", "dt": "pos", "diffusion": "nonneg"},
+        "peak": "pos", "peak_quantile": "num", "sea_floor": {"shore": "nonneg", "slope": "pos"},
+        "hummocks": {"amplitude": "nonneg", "octaves": OCTAVES, "inland": "span", "max_slope": "pos"},
+    },
+    "lake": {"dam_hint": "pt", "snap_radius": "pos", "min_inland": "nonneg", "frame_margin": "nonneg", "target_km2": "pos"},
+    "rivers": {"min_area_km2": "pos", "width_per_sqrt_km2": "pos", "max_width": "pos"},
+    "canal": {"caribbean": "pt", "pacific_locks": "pt", "pacific": "pt", "width": "pos", "depth": "pos", "dig_weight": "nonneg"},
+    "airport": {
+        "hint": "pt", "radius": "pos", "runway_length": "pos", "runway_spacing": "pos", "runway_width": "pos",
+        "margin": "nonneg", "distance_weight": "nonneg", "heading_range": "span",
+        "apron": {"length": "pos", "depth": "pos", "building": "pair"}, "edge_margin": "nonneg", "towards": "pt",
+        "culvert_penalty": "nonneg",
+    },
+    "roads": {
+        "grade": {k: {"g0": "pos", "k": "pos", "max_grade": "pos"} for k in ("highway", "road", "rail")},
+        "bridge": "pos", "sea_bridge": "pos", "canal_bridge": "pos", "reuse": "pos", "stops": "stops", "routes": "list",
+    },
+    "suitability": {"max_slope": "pos", "height_band": "span", "coast_fade": "frac", "coast_range": "pos", "crossing": "frac"},
+    "towns": {"road_discount": "pos", "jitter": "nonneg", "jitter_wavelength": "pos", "min_suitability": "frac",
+              "seed_snap": "nonneg", "seed": "num", "items": "list"},
+    "cover": {
+        "seed": "num", "beach_width": "nonneg",
+        "mangrove": {"max_height": "pos", "river_area_km2": "pos", "reach": "nonneg"},
+        "clearing": {"wavelength": "pos", "threshold": "frac", "lowland_bonus": "nonneg", "fringe_bonus": "nonneg"},
+        "high_forest": {"height": "pos", "slope": "pos"},
+    },
+    "transit": {"stops": "stops", "lines": "list", "off_urban": "pos", "off_road": "pos",
+                "grade": {"metro": "pos", "rail": "pos"}, "bridge": "pos", "interchange_radius": "pos"},
+}
+ZONE = {"line": {"id": "str", "kind": "str", "points": "pts2", "width": "pos", "rate": "nonneg"},
+        "disc": {"id": "str", "kind": "str", "at": "pt", "radius": "pos", "rate": "nonneg"}}
+ROUTE = {"id": "str", "kind": "str", "stops": "refs"}
+TOWN = {"id": "str", "target_km2": "pos", "?seeds": "pts1", "?seed_along": {"route": "str", "from": "str"}, "?road_affinity": "pos"}
+LINE = {"id": "str", "name": "str", "mode": "str", "color": "color", "branches": "branches", "station_spacing": "pos"}
+
+
+def check_procedural(w):
+    """procedural: strict keys, value rules, stop references and ids (src/world/spec.ts parseProcedural)."""
+    errs = []
+    W, H = w["bounds"]["width"], w["bounds"]["height"]
+
+    def is_pt(v):
+        return isinstance(v, list) and len(v) == 2 and all(is_num(c) for c in v)
+
+    def value(v, rule, path):
+        if isinstance(rule, dict):
+            section(v, rule, path)
+        elif rule in ("num", "pos", "nonneg", "frac", "int1"):
+            if not is_num(v):
+                errs.append(f"{path}: expected a number")
+            elif rule == "pos" and not v > 0:
+                errs.append(f"{path}: must be > 0")
+            elif rule == "nonneg" and not v >= 0:
+                errs.append(f"{path}: must be >= 0")
+            elif rule == "frac" and not 0 <= v <= 1:
+                errs.append(f"{path}: expected a fraction in [0, 1]")
+            elif rule == "int1" and not (isinstance(v, int) and v >= 1):
+                errs.append(f"{path}: expected an integer >= 1")
+        elif rule == "str":
+            if not isinstance(v, str) or not v:
+                errs.append(f"{path}: expected a non-empty string")
+        elif rule in ("pair", "span"):
+            if not is_pt(v):
+                errs.append(f"{path}: expected [number, number]")
+            elif rule == "span" and not v[0] < v[1]:
+                errs.append(f"{path}: expected [min, max] with min < max")
+        elif rule == "pt":
+            if not is_pt(v):
+                errs.append(f"{path}: expected [x, y]")
+            elif not (0 <= v[0] <= W and 0 <= v[1] <= H):
+                errs.append(f"{path}: ({v[0]}, {v[1]}) is outside the map")
+        elif rule in ("pts1", "pts2"):
+            n = 1 if rule == "pts1" else 2
+            if not isinstance(v, list) or len(v) < n:
+                errs.append(f"{path}: expected at least {n} points")
+            else:
+                for i, q in enumerate(v):
+                    value(q, "pt", f"{path}[{i}]")
+        elif rule == "color":
+            if not (isinstance(v, list) and len(v) == 3 and all(isinstance(c, int) and 0 <= c <= 255 for c in v)):
+                errs.append(f"{path}: expected [r, g, b] integers 0-255")
+        # list / stops / refs / branches are checked by the callers below
+
+    def section(o, schema, path):
+        if not isinstance(o, dict):
+            errs.append(f"{path}: expected a mapping")
+            return False
+        keys = {k.lstrip("?"): k.startswith("?") for k in schema}
+        for k in o:
+            if k not in keys:
+                errs.append(f"{path}.{k}: unknown key (allowed: {', '.join(keys)})")
+        for k, opt in keys.items():
+            if k not in o:
+                if not opt:
+                    errs.append(f"{path}.{k}: missing")
+                continue
+            value(o[k], schema[("?" if opt else "") + k], f"{path}.{k}")
+        return True
+
+    def unique(items, path):
+        seen = set()
+        for it in items:
+            i = it.get("id") if isinstance(it, dict) else None
+            if i in seen:
+                errs.append(f"{path}: duplicate id '{i}'")
+            seen.add(i)
+
+    def stops(v, path):
+        if not isinstance(v, dict) or not v:
+            errs.append(f"{path}: expected at least one stop")
+            return {}
+        for k, q in v.items():
+            if k == AIRPORT_TERMINAL_STOP:
+                errs.append(f"{path}.{k}: reserved stop id (the generated airport terminal)")
+            value(q, "pt", f"{path}.{k}")
+        return v
+
+    def refs(v, path, known):
+        if not isinstance(v, list) or len(v) < 2 or not all(isinstance(x, str) and x for x in v):
+            errs.append(f"{path}: expected at least 2 stop ids")
+            return
+        for x in v:
+            if x != AIRPORT_TERMINAL_STOP and x not in known:
+                errs.append(f"{path}: unknown stop '{x}'")
+
+    pr = w.get("procedural")
+    if not section(pr, PROC_SCHEMA, "procedural"):
+        return errs
+
+    rel = pr.get("relief") or {}
+    zones = rel.get("zones") if isinstance(rel.get("zones"), list) else []
+    for i, z in enumerate(zones):
+        kind = z.get("kind") if isinstance(z, dict) else None
+        if kind not in ZONE:
+            errs.append(f"procedural.relief.zones[{i}].kind: expected line or disc")
+        else:
+            section(z, ZONE[kind], f"procedural.relief.zones[{i}]")
+    unique(zones, "procedural.relief.zones")
+    mod = rel.get("modulation") or {}
+    if is_num(mod.get("lo")) and is_num(mod.get("hi")) and not mod["hi"] > mod["lo"]:
+        errs.append("procedural.relief.modulation.hi: must be > lo")
+    if is_num((rel.get("erosion") or {}).get("diffusion")) and rel["erosion"]["diffusion"] > 0.2:
+        errs.append("procedural.relief.erosion.diffusion: must be <= 0.2 (explicit step stability)")
+    if is_num(rel.get("peak_quantile")) and not 0 < rel["peak_quantile"] < 1:
+        errs.append("procedural.relief.peak_quantile: expected 0 < q < 1")
+
+    ap = pr.get("airport") or {}
+    hr = ap.get("heading_range")
+    if is_pt(hr) and not (hr[0] >= 0 and hr[1] <= 180):
+        errs.append("procedural.airport.heading_range: expected degrees within [0, 180]")
+    b = (ap.get("apron") or {}).get("building")
+    if is_pt(b) and not (b[0] > 0 and b[1] > 0):
+        errs.append("procedural.airport.apron.building: expected [length, depth] > 0")
+    if is_num(ap.get("runway_spacing")) and is_num(ap.get("runway_width")) and not ap["runway_spacing"] > ap["runway_width"]:
+        errs.append("procedural.airport.runway_spacing: must be > runway_width (runways would overlap)")
+
+    rd = pr.get("roads") or {}
+    road_stops = stops(rd.get("stops"), "procedural.roads.stops")
+    routes = rd.get("routes") if isinstance(rd.get("routes"), list) else []
+    for i, r in enumerate(routes):
+        p = f"procedural.roads.routes[{i}]"
+        if section(r, ROUTE, p):
+            if r.get("kind") not in ("highway", "road", "rail"):
+                errs.append(f"{p}.kind: expected highway, road, rail")
+            refs(r.get("stops"), f"{p}.stops", road_stops)
+    unique(routes, "procedural.roads.routes")
+    by_route = {r.get("id"): r for r in routes if isinstance(r, dict)}
+
+    tw = pr.get("towns") or {}
+    items = tw.get("items") if isinstance(tw.get("items"), list) else []
+    for i, t in enumerate(items):
+        p = f"procedural.towns.items[{i}]"
+        if not section(t, TOWN, p):
+            continue
+        if ("seeds" in t) == ("seed_along" in t):
+            errs.append(f"{p}: expected exactly one of seeds, seed_along")
+        sa = t.get("seed_along")
+        if isinstance(sa, dict):
+            rt = by_route.get(sa.get("route"))
+            if not rt:
+                errs.append(f"{p}.seed_along.route: unknown route '{sa.get('route')}'")
+            elif rt.get("kind") == "rail":
+                errs.append(f"{p}.seed_along.route: '{sa['route']}' is a railroad; towns grow along roads")
+            elif sa.get("from") == AIRPORT_TERMINAL_STOP or sa.get("from") not in (rt.get("stops") or []):
+                errs.append(f"{p}.seed_along.from: '{sa.get('from')}' is not a named stop of route '{sa['route']}'")
+    unique(items, "procedural.towns.items")
+
+    tr = pr.get("transit") or {}
+    transit_stops = stops(tr.get("stops"), "procedural.transit.stops")
+    lines = tr.get("lines") if isinstance(tr.get("lines"), list) else []
+    for i, l in enumerate(lines):
+        p = f"procedural.transit.lines[{i}]"
+        if not section(l, LINE, p):
+            continue
+        if l.get("mode") not in ("metro", "rail"):
+            errs.append(f"{p}.mode: expected metro, rail")
+        br = l.get("branches")
+        if not isinstance(br, list) or not br:
+            errs.append(f"{p}.branches: expected at least one branch")
+        else:
+            for j, b2 in enumerate(br):
+                refs(b2, f"{p}.branches[{j}]", transit_stops)
+    unique(lines, "procedural.transit.lines")
+    return errs
+
+
 if __name__ == "__main__":
     w = yaml.safe_load(WORLD.read_text())
     metrics = yaml.safe_load(METRICS.read_text()) if METRICS.exists() else None
-    errs = check(w) + check_streets(w, metrics) + check_layers(w)
+    errs = check(w) + check_streets(w, metrics) + check_layers(w) + check_procedural(w)
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "specs/map/preview.svg"
     out.write_text(render(w))
     print(f"wrote {out}")
     if errs:
         print("\n".join(errs))
         sys.exit(1)
-    print("OK: areas, landmark cells, coastline, character refs, active area, blockout, street profiles, population, street styles, reference sectors, street metrics, layers 1-5 (land cover, relief ridges, rivers, canal, water bodies, airports, main roads) consistent")
+    print("OK: areas, landmark cells, coastline, character refs, active area, blockout, street profiles, population, street styles, reference sectors, street metrics, layers 1-5 (land cover, relief ridges, rivers, canal, water bodies, airports, main roads), procedural inputs consistent")

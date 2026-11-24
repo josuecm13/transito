@@ -155,6 +155,13 @@ export function growTowns(suit: FieldGrid, nearRoad: readonly MaskGrid[], p: Gro
   }
   if (unbuilt) for (let i = 0; i < n; i++) if (unbuilt.data[i]) owner[i] = 0;
   const density = field(suit);
-  for (let i = 0; i < n; i++) if (owner[i]) density.data[i] = 0.35 + 0.65 * (1 - Math.sqrt(order[i]!));
-  return { owner, density, areasKm2: counts.map((c) => (c * cell * cell) / 1e6) };
+  // Areas from the final ownership: crossed river cells were grown through but are not built.
+  const built = p.towns.map(() => 0);
+  for (let i = 0; i < n; i++) {
+    const k = owner[i]!;
+    if (!k) continue;
+    density.data[i] = 0.35 + 0.65 * (1 - Math.sqrt(order[i]!));
+    built[k - 1] = built[k - 1]! + 1;
+  }
+  return { owner, density, areasKm2: built.map((c) => (c * cell * cell) / 1e6) };
 }

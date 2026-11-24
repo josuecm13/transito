@@ -5,8 +5,8 @@ with islands, ragged towns, El Corredor as a ribbon to the airport, a metro and 
 the maths of procedural maps and write functions that do it, instead of drawing shapes. This file maps each feature of
 the vision to a technique, a formula and the function that implements it in `src/world/proc/`.
 
-**Status:** working prototype, not wired into the game layers yet. Parameters live in `src/world/proc/params.ts` and
-move into `specs/map/world.yaml` once the director accepts the look (CLAUDE.md: specs first).
+**Status:** working prototype, not wired into the game layers yet. Parameters live in the `procedural:` section of
+`specs/map/world.yaml` (conventions in `specs/map/README.md`).
 Render: `npm run isthmus` → `.cache/isthmus.png` (gitignored). Guards: `tests/proc-isthmus.test.ts`.
 
 **Evidence:** formulas come from the papers below. Only Barnes et al. 2014 was opened in this pass; the rest are cited

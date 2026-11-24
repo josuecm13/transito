@@ -187,6 +187,30 @@ and the old entries are then removed):
 | `routes.canal` (line only) | stays as the centreline of `canal` | kept |
 | `routes.runway-1/2` | stay, referenced by `airports` | kept |
 
+## Procedural isthmus (`procedural:`)
+
+Inputs of the procedural generator (`src/world/proc/`, `npm run isthmus` renders `.cache/isthmus.png`).
+They are coarse intent only; every shape is derived from them and `geometry.land`. Until the game
+reads this map (#12), the authored layers above stay in use and the two coexist.
+
+| Key | What it steers |
+|---|---|
+| `cell` | default generation grid (m); `generateIsthmus(spec, { cell })` can override it |
+| `relief` | uplift `zones` (`line`: polyline + width, `disc`: centre + radius; `rate` scales the uplift), noise modulation, coast taper, stream-power `erosion`, `peak` height, sea floor and the inland `hummocks` that become lake islands |
+| `lake` | the reservoir: `dam_hint` (snapped to the largest drainage area within `snap_radius`) flooded up to `target_km2` |
+| `rivers` | smallest drawn drainage area and width per √km² |
+| `canal` | sea points at both ends, the Pacific locks hint, channel width / depth, excavation weight |
+| `airport` | search `hint` and `radius`, runway size and spacing, apron, the side the terminal faces (`towards`) |
+| `roads` | grade costs per kind, bridge / causeway / canal-bridge / reuse multipliers, named `stops` and the `routes` that join them |
+| `suitability` | where towns may build: slope, height band, coast preference, river crossing |
+| `towns` | growth tuning and `items`: each town has `seeds` **or** `seed_along: { route, from }` (seeded along that road from its stop towards the route's end, growing only near that stretch), and a `target_km2` |
+| `cover` | beach, mangrove, clearings and high forest thresholds |
+| `transit` | named `stops` and the metro / rail `lines`; each branch is a list of stop ids |
+
+Stops are named, not inlined. `airport-terminal` is reserved: it means the generated airport's
+terminal and may not be defined as a stop. Every key is strict (unknown keys are errors) and the
+same rules are checked by `parseWorldSpec` and `tools/render_map_preview.py`.
+
 ## Naming
 
 Until open question #3 is decided, places use working names; the real place that inspired each one

@@ -9,6 +9,7 @@ import { parseWorldSpec } from '../src/world/spec.ts';
 import { cellAt, field, mask } from '../src/world/proc/grid.ts';
 import { accumulate, routeFlow } from '../src/world/proc/hydrology.ts';
 import { generateIsthmus, type Isthmus } from '../src/world/proc/isthmus.ts';
+import { growTowns } from '../src/world/proc/settlements.ts';
 
 const spec = parseWorldSpec(readFileSync(new URL('../specs/map/world.yaml', import.meta.url), 'utf8'));
 let iso: Isthmus;
@@ -137,6 +138,32 @@ test('towns: built cells are dry land, each town within its target, El Corredor 
   areasKm2.forEach((a, k) => assert.ok(a <= targets[k]! + 1e-9, `town ${k} ${a} ≤ ${targets[k]}`));
   assert.ok(areasKm2[3]! >= 1.0, `El Corredor grew (${areasKm2[3]} km²)`);
   assert.ok(areasKm2[0]! >= 2.0, `La Ciudad grew (${areasKm2[0]} km²)`);
+});
+
+test('towns: reported area is the final built cells (river cells crossed by growth are not counted)', () => {
+  // Real map: every reported area equals its owned cells.
+  const { owner, areasKm2 } = iso.towns;
+  const { cell } = iso.towns.density;
+  const counts = areasKm2.map(() => 0);
+  for (let i = 0; i < owner.length; i++) if (owner[i]) counts[owner[i]! - 1]! += 1;
+  areasKm2.forEach((a, k) => assert.ok(Math.abs(a - (counts[k]! * cell * cell) / 1e6) < 1e-9, `town ${k}: reported ${a}, built ${(counts[k]! * cell * cell) / 1e6}`));
+  // Synthetic: flat 40 x 20 plain, a river column at x = 20, one town seeded west of it with room to cross.
+  const g = { w: 40, h: 20, cell: 10 };
+  const suit = field(g, 1);
+  const river = mask(g);
+  for (let y = 0; y < g.h; y++) river.data[y * g.w + 20] = 1;
+  const t = growTowns(suit, [mask(g)], { towns: [{ id: 't', seeds: [{ x: 105, y: 105 }], targetKm2: 0.06 }], roadDiscount: 0.5, jitter: 0, jitterWavelength: 50, minSuitability: 0.1, seedSnap: 0, seed: 1 }, river);
+  let built = 0;
+  let east = 0;
+  for (let i = 0; i < g.w * g.h; i++) {
+    if (!t.owner[i]) continue;
+    assert.equal(river.data[i], 0, 'river cell left unbuilt');
+    built++;
+    if (i % g.w > 20) east++;
+  }
+  assert.ok(east > 0, 'test setup: growth crossed the river');
+  assert.ok(built < 600, 'test setup: some of the 600-cell budget went to river cells');
+  assert.equal(t.areasKm2[0], (built * 100) / 1e6);
 });
 
 test('transit: every station sits on a track of its line; lines that share a stop make an interchange', () => {
