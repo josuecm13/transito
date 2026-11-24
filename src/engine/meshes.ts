@@ -11,6 +11,7 @@ import {
   InstancedMesh,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
@@ -94,7 +95,24 @@ const mat = (color: number): MeshStandardMaterial =>
  * whatever the depth-buffer precision. Everything standing on the ground (buildings, characters,
  * markers) writes depth as usual and is drawn afterwards.
  */
+const DEPTH_PREPASS_ORDER = -10;
 const GROUND_ORDER = { sea: -3, land: -2, far: -1.5, apron: -1.45, water: -1.4, city: -1 } as const;
+
+/**
+ * Ground layers are painted in order and write no depth (see GROUND_ORDER), so by themselves a hill hides nothing behind it:
+ * the 70 m lake and the far water showed through the mountains. This is the same geometry drawn first, depth only and
+ * pushed back a little, so terrain occludes what lies behind it while the flat layers on top of it still win.
+ */
+export function depthPrepass(ground: Mesh, name = `${ground.name}:depth`): Mesh {
+  const material = new MeshBasicMaterial({ colorWrite: false, depthWrite: true });
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = 2;
+  material.polygonOffsetUnits = 2;
+  const mesh = new Mesh(ground.geometry, material);
+  mesh.renderOrder = DEPTH_PREPASS_ORDER;
+  mesh.name = name;
+  return mesh;
+}
 
 function asGround<T extends Mesh>(mesh: T, order: number): T {
   mesh.renderOrder = order;

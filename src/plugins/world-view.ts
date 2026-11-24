@@ -13,6 +13,7 @@ import {
   MARKER_HEIGHT,
   PALETTE,
   buildingsMesh,
+  depthPrepass,
   farGroundMesh,
   groundMesh,
   landMesh,
@@ -134,7 +135,8 @@ export const worldView: GamePlugin = {
       const ch = (shift: number): number => Math.min(255, Math.round(((base >> shift) & 255) * k));
       return (ch(16) << 16) | (ch(8) << 8) | ch(0);
     };
-    scene.add(farGroundMesh(farSoup, { heightAt, normalAt: (x, y) => terrain.normalAt(x, y) }, coverColor));
+    const far = farGroundMesh(farSoup, { heightAt, normalAt: (x, y) => terrain.normalAt(x, y) }, coverColor);
+    scene.add(far, depthPrepass(far));
 
     // Layer 3 water, whole isthmus: rivers follow their bed, Gatún Lake / canal reaches / lock chambers are flat at their levels,
     // lock aprons are grey slabs at the wall top, the chamber walls are grey blockout boxes. Rivers inside the detailed rect are
@@ -225,7 +227,7 @@ export const worldView: GamePlugin = {
       heightAt,
       normalAt: (x, y) => terrain.normalAt(x, y),
     });
-    scene.add(ground);
+    scene.add(ground, depthPrepass(ground));
 
     const tone = (b: CityBuilding): number =>
       city.landUse[b.block]?.use === 'commercial' ? PALETTE.buildingCommercial : PALETTE.buildingResidential;
