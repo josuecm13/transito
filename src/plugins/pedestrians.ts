@@ -42,7 +42,7 @@ export const pedestrians: GamePlugin = {
   name: 'pedestrians',
   dependsOn: ['world-data', 'world-physics'],
   setup(ctx) {
-    const { spec, slice, walkGraph: graph } = ctx.services.get(WorldDataKey);
+    const { spec, slice, walkGraph: graph, terrain } = ctx.services.get(WorldDataKey);
     const cfg = spec.population.pedestrians;
     const rng = createRng(spec.blockout.seed).fork('pedestrians');
     const { rapier: R, world } = ctx.physics;
@@ -87,7 +87,7 @@ export const pedestrians: GamePlugin = {
       const pose = followerPose(e.follower as NonNullable<Entity['follower']>, graph, PEDS.laneOffset);
       s.pos = pose.position;
       s.heading = pose.heading;
-      const p = specToScene(pose.position, bodyCenterY);
+      const p = specToScene(pose.position, terrain.heightAt(pose.position.x, pose.position.y) + bodyCenterY);
       e.position.x = p.x;
       e.position.y = p.y;
       e.position.z = p.z;

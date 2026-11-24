@@ -15,9 +15,9 @@ export const cameraFollow: GamePlugin = {
   name: 'camera-follow',
   dependsOn: ['world-data'],
   setup(ctx) {
-    const { slice } = ctx.services.get(WorldDataKey);
+    const { slice, terrain } = ctx.services.get(WorldDataKey);
     const targets = ctx.ecs.with('cameraTarget');
-    const spawn = specToScene(slice.spawn.position);
+    const spawn = specToScene(slice.spawn.position, terrain.heightAt(slice.spawn.position.x, slice.spawn.position.y));
     let focus: { x: number; y: number; z: number } | undefined;
 
     ctx.addSystem({

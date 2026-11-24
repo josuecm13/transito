@@ -197,6 +197,20 @@ export interface WorldSpec {
   blockout: Blockout;
   streetStyles: StreetStyles;
   population: { pedestrians: PedestrianPopulation };
+  /** Terrain height model of the active area (relief: in world.yaml). */
+  relief: ReliefSpec;
+  /** Layer 1: land cover (land_cover:). */
+  landCover: LandCoverSpec;
+  /** Layer 3a: rivers (rivers:). */
+  rivers: RiversSpec;
+  /** Layer 3b: canal channel and locks (canal:). */
+  canal: CanalSpec;
+  /** Layer 3b: interior water polygons (water_bodies:). */
+  waterBodies: WaterBody[];
+  /** Layer 4: airports (airports:). */
+  airports: AirportSpec[];
+  /** Layer 5: main roads (main_roads:). */
+  mainRoads: MainRoadsSpec;
 }
 
 export class WorldSpecError extends Error {
@@ -225,6 +239,13 @@ class Reader {
       return undefined;
     }
     return v;
+  }
+
+  /** Strict keys: reports every key of `o` that is not in `allowed` (new layer sections are parsed strictly). */
+  exact(o: Obj, allowed: readonly string[], path: string): void {
+    for (const k of Object.keys(o)) {
+      if (!allowed.includes(k)) this.problems.push(`${path}.${k}: unknown key (allowed: ${allowed.join(', ')})`);
+    }
   }
 
   num(o: Obj, key: string, path: string): number {
@@ -516,6 +537,7 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
   }
 
   const streetStyles = parseStreetStyles(r, doc.street_styles, districts, grid, bounds, activeArea);
+  const relief = parseRelief(r, doc.relief, bounds);
 
   const popRaw = r.obj(doc.population, 'population');
   const pedRaw = popRaw ? r.obj(popRaw.pedestrians, 'population.pedestrians') : undefined;
@@ -541,6 +563,13 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
     }
   }
 
+  const landCover = parseLandCover(r, doc.land_cover);
+  const rivers = parseRivers(r, doc.rivers);
+  const canal = parseCanal(r, doc.canal);
+  const waterBodies = parseWaterBodies(r, doc.water_bodies);
+  const airports = parseAirports(r, doc.airports);
+  const mainRoads = parseMainRoads(r, doc.main_roads);
+
   if (r.problems.length > 0) throw new WorldSpecError(r.problems);
 
   return {
@@ -559,6 +588,13 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
     blockout,
     streetStyles,
     population: { pedestrians },
+    relief,
+    landCover,
+    rivers,
+    canal,
+    waterBodies,
+    airports,
+    mainRoads,
   };
 }
 
@@ -834,4 +870,797 @@ export function districtLabelPoint(spec: WorldSpec, d: District): Vec2 | undefin
   const size = spec.bounds.cellSize;
   const p = { x: (best[0] + 0.5) * size, y: (spec.grid.length - best[1] - 0.5) * size };
   return pointInPolygon(p, spec.land) ? p : undefined;
+}
+
+// ---------------------------------------------------------------------------------------------
+// relief (terrain height model). Semantics: README.md "Relief"; model: src/world/terrain.ts.
+
+/** Seeded fractal noise: `octaves` layers, each with half the wavelength and `persistence` x the amplitude. */
+export interface NoiseSpec {
+  /** m */
+  amplitude: number;
+  /** m, lowest octave */
+  wavelength: number;
+  octaves: number;
+  persistence: number;
+}
+
+export interface HillFeature {
+  id: string;
+  inspiredBy?: string;
+  at: Vec2;
+  /** m, full effect inside */
+  coreRadius: number;
+  /** m, effect ends */
+  radius: number;
+  /** m added at the core */
+  uplift: number;
+  noise: NoiseSpec;
+}
+
+/** Axis-aligned flat zone: `level` (a height or the zone's mean) or `cap` (a ceiling). */
+export interface FlattenZone {
+  id: string;
+  rect: { minX: number; minY: number; maxX: number; maxY: number };
+  level: 'auto' | number | undefined;
+  cap: number | undefined;
+  /** m, blend back to the natural terrain outside the rect */
+  blend: number;
+}
+
+export interface BandRange {
+  min: number;
+  max: number;
+}
+
+/** Linear relief feature (layer 2): h = amplitude * exp(-(s / width)^2), s = distance to the crest polyline. */
+export interface RidgeFeature {
+  id: string;
+  inspiredBy?: string;
+  /** Crest polyline, m. */
+  points: Vec2[];
+  /** m, half-width at 1/e */
+  width: number;
+  /** m, crest height above the base terrain */
+  amplitude: number;
+}
+
+export interface ReliefSpec {
+  seed: number;
+  seaFloor: { slope: number; minHeight: number };
+  coastalRamp: { slope: number; maxHeight: number; noiseTaper: number };
+  /** m, inland ground never drops below this (drainage floor) */
+  landFloor: number;
+  rolling: NoiseSpec;
+  hills: HillFeature[];
+  /** Whole-isthmus ridges (layer 2). */
+  ridges: RidgeFeature[];
+  /**
+   * Regional uplift outside the active area (layer 2): `height` + `noise` m added on top of the base
+   * terrain, fading in over `rectBlend` m beyond the active rect and over `coastBlend` m inland from
+   * the shore, so the active area and the shoreline keep their calibrated relief. Ridges fade in the
+   * same way over `ridgeRectBlend` m (shorter, so a crest just outside the rect still reaches full height).
+   */
+  upland: { height: number; rectBlend: number; ridgeRectBlend: number; coastBlend: number; noise: NoiseSpec };
+  flatten: FlattenZone[];
+  landmarkPads: { radius: number; blend: number };
+  streets: { maxGrade: number; shoulder: number };
+  grid: { cell: number; margin: number; far: { cell: number } };
+  targets: {
+    hills: { slopeP50: BandRange; slopeP90: BandRange; slopeP99Max: number };
+    plain: { slopeP50: BandRange; slopeP90: BandRange; slopeMax: number };
+    runwayFlatTolerance: number;
+    coastTolerance: number;
+  };
+}
+
+function parseRelief(r: Reader, raw: unknown, bounds: { width: number; height: number }): ReliefSpec {
+  const o = r.obj(raw, 'relief');
+  const empty = (): ReliefSpec => ({
+    seed: NaN,
+    seaFloor: { slope: NaN, minHeight: NaN },
+    coastalRamp: { slope: NaN, maxHeight: NaN, noiseTaper: NaN },
+    landFloor: NaN,
+    rolling: { amplitude: NaN, wavelength: NaN, octaves: NaN, persistence: NaN },
+    hills: [],
+    ridges: [],
+    upland: { height: NaN, rectBlend: NaN, ridgeRectBlend: NaN, coastBlend: NaN, noise: { amplitude: NaN, wavelength: NaN, octaves: NaN, persistence: NaN } },
+    flatten: [],
+    landmarkPads: { radius: NaN, blend: NaN },
+    streets: { maxGrade: NaN, shoulder: NaN },
+    grid: { cell: NaN, margin: NaN, far: { cell: NaN } },
+    targets: {
+      hills: { slopeP50: { min: NaN, max: NaN }, slopeP90: { min: NaN, max: NaN }, slopeP99Max: NaN },
+      plain: { slopeP50: { min: NaN, max: NaN }, slopeP90: { min: NaN, max: NaN }, slopeMax: NaN },
+      runwayFlatTolerance: NaN,
+      coastTolerance: NaN,
+    },
+  });
+  if (!o) return empty();
+  const pos = (v: number, path: string): number => {
+    if (!(v > 0)) r.problems.push(`${path}: must be > 0`);
+    return v;
+  };
+  const section = (key: string, parent: Obj = o, base = 'relief'): Obj | undefined => r.obj(parent[key], `${base}.${key}`);
+  const noise = (v: unknown, path: string): NoiseSpec => {
+    const n = r.obj(v, path);
+    const out: NoiseSpec = { amplitude: NaN, wavelength: NaN, octaves: NaN, persistence: NaN };
+    if (!n) return out;
+    out.amplitude = r.num(n, 'amplitude', path);
+    out.wavelength = pos(r.num(n, 'wavelength', path), `${path}.wavelength`);
+    out.octaves = r.num(n, 'octaves', path);
+    if (!Number.isInteger(out.octaves) || out.octaves < 1 || out.octaves > 8) r.problems.push(`${path}.octaves: expected an integer in [1, 8]`);
+    out.persistence = r.num(n, 'persistence', path);
+    if (!(out.persistence > 0 && out.persistence < 1)) r.problems.push(`${path}.persistence: expected a number in (0, 1)`);
+    return out;
+  };
+  const band = (v: unknown, path: string): BandRange => {
+    const [min, max] = r.pair(v, path);
+    if (!(min < max)) r.problems.push(`${path}: expected [min, max] with min < max`);
+    return { min, max };
+  };
+  const inBounds = (p: Vec2, path: string): void => {
+    if (!(p.x >= 0 && p.x <= bounds.width && p.y >= 0 && p.y <= bounds.height)) r.problems.push(`${path}: outside the map bounds`);
+  };
+
+  const out = empty();
+  out.seed = r.num(o, 'seed', 'relief');
+  const sf = section('sea_floor');
+  if (sf) out.seaFloor = { slope: pos(r.num(sf, 'slope', 'relief.sea_floor'), 'relief.sea_floor.slope'), minHeight: r.num(sf, 'min_height', 'relief.sea_floor') };
+  if (out.seaFloor.minHeight >= 0) r.problems.push('relief.sea_floor.min_height: must be < 0');
+  const cr = section('coastal_ramp');
+  if (cr) {
+    const p = 'relief.coastal_ramp';
+    out.coastalRamp = { slope: r.num(cr, 'slope', p), maxHeight: pos(r.num(cr, 'max_height', p), `${p}.max_height`), noiseTaper: pos(r.num(cr, 'noise_taper', p), `${p}.noise_taper`) };
+    if (out.coastalRamp.slope < 0) r.problems.push(`${p}.slope: must be >= 0`);
+  }
+  out.landFloor = r.num(o, 'land_floor', 'relief');
+  out.rolling = noise(o.rolling, 'relief.rolling');
+
+  if (!Array.isArray(o.hills)) {
+    r.problems.push('relief.hills: expected a list');
+  } else {
+    o.hills.forEach((raw2, i) => {
+      const p = `relief.hills[${i}]`;
+      const h = r.obj(raw2, p);
+      if (!h) return;
+      const hill: HillFeature = {
+        id: r.str(h, 'id', p),
+        at: r.point(h.at, `${p}.at`),
+        coreRadius: pos(r.num(h, 'core_radius', p), `${p}.core_radius`),
+        radius: r.num(h, 'radius', p),
+        uplift: r.num(h, 'uplift', p),
+        noise: noise(h.noise, `${p}.noise`),
+      };
+      const ins = r.optStr(h, 'inspired_by', p);
+      if (ins !== undefined) hill.inspiredBy = ins;
+      if (!(hill.radius > hill.coreRadius)) r.problems.push(`${p}.radius: must be > core_radius`);
+      inBounds(hill.at, `${p}.at`);
+      out.hills.push(hill);
+    });
+  }
+
+  if (!Array.isArray(o.ridges)) {
+    r.problems.push('relief.ridges: expected a list');
+  } else {
+    o.ridges.forEach((raw2, i) => {
+      const p = `relief.ridges[${i}]`;
+      const rd = r.obj(raw2, p);
+      if (!rd) return;
+      r.exact(rd, ['id', 'inspired_by', 'points', 'width', 'amplitude'], p);
+      const ridge: RidgeFeature = {
+        id: r.str(rd, 'id', p),
+        points: r.points(rd.points, `${p}.points`, 2),
+        width: pos(r.num(rd, 'width', p), `${p}.width`),
+        amplitude: pos(r.num(rd, 'amplitude', p), `${p}.amplitude`),
+      };
+      const ins = r.optStr(rd, 'inspired_by', p);
+      if (ins !== undefined) ridge.inspiredBy = ins;
+      ridge.points.forEach((pt, j) => inBounds(pt, `${p}.points[${j}]`));
+      out.ridges.push(ridge);
+    });
+  }
+
+  const up = section('upland');
+  if (up) {
+    const p = 'relief.upland';
+    r.exact(up, ['height', 'rect_blend', 'ridge_rect_blend', 'coast_blend', 'noise'], p);
+    out.upland = { height: r.num(up, 'height', p), rectBlend: pos(r.num(up, 'rect_blend', p), `${p}.rect_blend`), ridgeRectBlend: pos(r.num(up, 'ridge_rect_blend', p), `${p}.ridge_rect_blend`), coastBlend: pos(r.num(up, 'coast_blend', p), `${p}.coast_blend`), noise: noise(up.noise, `${p}.noise`) };
+    if (out.upland.height < 0) r.problems.push(`${p}.height: must be >= 0`);
+  }
+
+  if (!Array.isArray(o.flatten)) {
+    r.problems.push('relief.flatten: expected a list');
+  } else {
+    o.flatten.forEach((raw2, i) => {
+      const p = `relief.flatten[${i}]`;
+      const z = r.obj(raw2, p);
+      if (!z) return;
+      const rect = r.points(z.rect, `${p}.rect`, 2);
+      if (rect.length !== 2) r.problems.push(`${p}.rect: expected [[minX, minY], [maxX, maxY]]`);
+      const [a, b] = [rect[0] ?? { x: NaN, y: NaN }, rect[1] ?? { x: NaN, y: NaN }];
+      if (!(a.x < b.x && a.y < b.y)) r.problems.push(`${p}.rect: min corner must be south-west of max corner`);
+      inBounds(a, `${p}.rect[0]`);
+      inBounds(b, `${p}.rect[1]`);
+      const hasLevel = z.level !== undefined;
+      const hasCap = z.cap !== undefined;
+      if (hasLevel === hasCap) r.problems.push(`${p}: needs exactly one of level or cap`);
+      let level: 'auto' | number | undefined;
+      if (hasLevel) {
+        if (z.level === 'auto') level = 'auto';
+        else level = r.num(z, 'level', p);
+      }
+      const blend = r.num(z, 'blend', p);
+      if (!(blend >= 0)) r.problems.push(`${p}.blend: must be >= 0`);
+      out.flatten.push({
+        id: r.str(z, 'id', p),
+        rect: { minX: a.x, minY: a.y, maxX: b.x, maxY: b.y },
+        level,
+        cap: hasCap ? r.num(z, 'cap', p) : undefined,
+        blend,
+      });
+    });
+  }
+
+  const lp = section('landmark_pads');
+  if (lp) out.landmarkPads = { radius: pos(r.num(lp, 'radius', 'relief.landmark_pads'), 'relief.landmark_pads.radius'), blend: pos(r.num(lp, 'blend', 'relief.landmark_pads'), 'relief.landmark_pads.blend') };
+
+  const st = section('streets');
+  if (st) out.streets = { maxGrade: pos(r.num(st, 'max_grade', 'relief.streets'), 'relief.streets.max_grade'), shoulder: r.num(st, 'shoulder', 'relief.streets') };
+  if (out.streets.maxGrade >= 1) r.problems.push('relief.streets.max_grade: expected a fraction below 1');
+  const gr = section('grid');
+  if (gr) {
+    r.exact(gr, ['cell', 'margin', 'far'], 'relief.grid');
+    out.grid = { cell: pos(r.num(gr, 'cell', 'relief.grid'), 'relief.grid.cell'), margin: r.num(gr, 'margin', 'relief.grid'), far: { cell: NaN } };
+    const far = r.obj(gr.far, 'relief.grid.far');
+    if (far) {
+      r.exact(far, ['cell'], 'relief.grid.far');
+      out.grid.far = { cell: pos(r.num(far, 'cell', 'relief.grid.far'), 'relief.grid.far.cell') };
+      if (!(out.grid.far.cell > out.grid.cell)) r.problems.push('relief.grid.far.cell: must be coarser than relief.grid.cell');
+      if (bounds.width % out.grid.far.cell !== 0 || bounds.height % out.grid.far.cell !== 0) {
+        r.problems.push(`relief.grid.far.cell: must divide the map size ${bounds.width} x ${bounds.height}`);
+      }
+    }
+  }
+  if (out.grid.margin < 0) r.problems.push('relief.grid.margin: must be >= 0');
+
+  const tg = section('targets');
+  if (tg) {
+    const h = r.obj(tg.hills, 'relief.targets.hills');
+    if (h) out.targets.hills = { slopeP50: band(h.slope_p50, 'relief.targets.hills.slope_p50'), slopeP90: band(h.slope_p90, 'relief.targets.hills.slope_p90'), slopeP99Max: r.num(h, 'slope_p99_max', 'relief.targets.hills') };
+    const pl = r.obj(tg.plain, 'relief.targets.plain');
+    if (pl) out.targets.plain = { slopeP50: band(pl.slope_p50, 'relief.targets.plain.slope_p50'), slopeP90: band(pl.slope_p90, 'relief.targets.plain.slope_p90'), slopeMax: r.num(pl, 'slope_max', 'relief.targets.plain') };
+    out.targets.runwayFlatTolerance = r.num(tg, 'runway_flat_tolerance', 'relief.targets');
+    out.targets.coastTolerance = r.num(tg, 'coast_tolerance', 'relief.targets');
+  }
+  return out;
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Layers 1-5 (whole isthmus). Semantics: README.md "Layers"; code: src/world/layers/.
+// These sections are parsed strictly: an unknown key is an error.
+
+export interface LandCoverSpec {
+  seed: number;
+  classes: string[];
+  /** Coast inside each rect (corners [[minX, minY], [maxX, maxY]], m) is tidal. */
+  tidalShores: { id: string; rect: Rect2 }[];
+  mangrove: { band: number; shores: string[] };
+  forest: { density: number; noise: { wavelength: number; octaves: number; persistence: number }; clearingBelow: number };
+  settlements: { id: string; at: Vec2; radius: number; inspiredBy?: string }[];
+  /** Layer 1b re-mask after relief and rivers. */
+  refine: { bareSlope: number; waterMargin: number };
+  /** Planned shares of land, [min, max] as fractions. */
+  shares: { urban: Range; wetland: Range };
+}
+
+export type Rect2 = { minX: number; minY: number; maxX: number; maxY: number };
+
+export interface RiverOutlet {
+  id: string;
+  inspiredBy?: string;
+  /** Shoreline point, m: of geometry.land (coast outlet, the default) or of `outlet.waterBody`. */
+  mouth: Vec2;
+  /** Lake-fed river: the mouth lies on the shore of this water body instead of the coast. */
+  outlet?: { waterBody: string };
+  /** Optional low-cost corridor points the derived course follows, m. */
+  guide: Vec2[];
+}
+
+export interface RiversSpec {
+  seed: number;
+  accumulationMinKm2: number;
+  maxWidth: number;
+  mouthTolerance: number;
+  items: RiverOutlet[];
+}
+
+export interface LockSpec {
+  id: string;
+  /** Landmark id the lock flight sits at. */
+  landmark: string;
+  inspiredBy?: string;
+  steps: number;
+  /** [length, width] of one chamber, m. */
+  chamber: Range;
+}
+
+export interface CanalSpec {
+  /** routes entry of kind waterway used as the centreline. */
+  route: string;
+  width: number;
+  seaLevel: number;
+  lakeLevel: number;
+  apron: number;
+  locks: LockSpec[];
+  bridgeLandmarks: string[];
+}
+
+export interface WaterBody {
+  id: string;
+  kind: 'lake' | 'inlet';
+  inspiredBy?: string;
+  polygon: Vec2[];
+  /** Inlet only: the lake it belongs to. */
+  of?: string;
+  /** Lake only: islands generated inside the polygon. */
+  islands?: { seed: number; count: number };
+}
+
+export interface AirportSpec {
+  id: string;
+  inspiredBy?: string;
+  /** routes ids of kind runway. */
+  runways: string[];
+  runwayLength: number;
+  runwaySpacing: number;
+  terminal: string;
+  cargo: string;
+  /** relief.flatten id that levels the site. */
+  flatten: string;
+  taxiway: { width: number };
+}
+
+export type RoadClass = 'highway' | 'arterial';
+export type MainNodeKind = 'hub' | 'gateway' | 'junction' | 'waypoint' | 'landfall';
+
+export interface MainNode {
+  id: string;
+  at: Vec2;
+  kind: MainNodeKind;
+  landmark?: string;
+  inspiredBy?: string;
+}
+
+export interface BridgeDecl {
+  id: string;
+  /** 'canal' or a water_bodies id. */
+  over: string;
+  at: Vec2;
+  /** m, deck length including abutments. */
+  span: number;
+  landmark?: string;
+}
+
+export interface MainRoad {
+  id: string;
+  inspiredBy?: string;
+  class: RoadClass;
+  structure: 'at-grade' | 'viaduct';
+  /** Overrides main_roads.params.max_grade[class]. */
+  maxGrade?: number;
+  elevated: boolean;
+  /** routes ids this road replaces once the layer is implemented. */
+  supersedes: string[];
+  /** Node ids, in order; each consecutive pair is an edge. */
+  chain: string[];
+  bridges: BridgeDecl[];
+}
+
+export interface MainRoadsSpec {
+  params: {
+    maxGrade: Record<RoadClass, number>;
+    cost: { k: number; s0: number };
+    minInterchange: number;
+    bridge: { abutment: number; canalClearance: number; riverClearance: number };
+    viaduct: { offset: Range; deckAboveSea: number; pierSpacing: number };
+    sampleStep: number;
+  };
+  nodes: MainNode[];
+  roads: MainRoad[];
+  coastway: {
+    id: string;
+    boulevard: string;
+    viaduct: { road: string; side: 'bay'; around: string };
+    strip: { kind: string; capHeight: number; polygon: Vec2[] };
+  };
+}
+
+const blankRect = (): Rect2 => ({ minX: NaN, minY: NaN, maxX: NaN, maxY: NaN });
+const nan2: Range = [NaN, NaN];
+
+function listOf(r: Reader, v: unknown, path: string): unknown[] {
+  if (!Array.isArray(v)) {
+    r.problems.push(`${path}: expected a list`);
+    return [];
+  }
+  return v;
+}
+
+function strList(r: Reader, v: unknown, path: string): string[] {
+  if (!Array.isArray(v) || v.some((x) => typeof x !== 'string' || x === '')) {
+    r.problems.push(`${path}: expected a list of non-empty strings`);
+    return [];
+  }
+  return v as string[];
+}
+
+function rectOf(r: Reader, v: unknown, path: string): Rect2 {
+  const pts = r.points(v, path, 2);
+  if (pts.length !== 2) {
+    r.problems.push(`${path}: expected [[minX, minY], [maxX, maxY]]`);
+    return blankRect();
+  }
+  const [a, b] = pts as [Vec2, Vec2];
+  if (!(a.x < b.x && a.y < b.y)) r.problems.push(`${path}: min corner must be south-west of max corner`);
+  return { minX: a.x, minY: a.y, maxX: b.x, maxY: b.y };
+}
+
+function fraction(r: Reader, v: number, path: string): number {
+  if (!(v >= 0 && v <= 1)) r.problems.push(`${path}: expected a fraction in [0, 1]`);
+  return v;
+}
+
+function positive(r: Reader, v: number, path: string): number {
+  if (!(v > 0)) r.problems.push(`${path}: must be > 0`);
+  return v;
+}
+
+function bandOf(r: Reader, v: unknown, path: string): Range {
+  const [min, max] = r.pair(v, path);
+  if (!(min >= 0 && min < max && max <= 1)) r.problems.push(`${path}: expected [min, max] fractions with 0 <= min < max <= 1`);
+  return [min, max];
+}
+
+function parseLandCover(r: Reader, raw: unknown): LandCoverSpec {
+  const path = 'land_cover';
+  const empty: LandCoverSpec = {
+    seed: NaN,
+    classes: [],
+    tidalShores: [],
+    mangrove: { band: NaN, shores: [] },
+    forest: { density: NaN, noise: { wavelength: NaN, octaves: NaN, persistence: NaN }, clearingBelow: NaN },
+    settlements: [],
+    refine: { bareSlope: NaN, waterMargin: NaN },
+    shares: { urban: nan2, wetland: nan2 },
+  };
+  const o = r.obj(raw, path);
+  if (!o) return empty;
+  r.exact(o, ['seed', 'classes', 'tidal_shores', 'mangrove', 'forest', 'settlements', 'refine', 'shares'], path);
+  const out = { ...empty };
+  out.seed = r.num(o, 'seed', path);
+  out.classes = strList(r, o.classes, `${path}.classes`);
+  out.tidalShores = listOf(r, o.tidal_shores, `${path}.tidal_shores`).flatMap((raw2, i) => {
+    const p = `${path}.tidal_shores[${i}]`;
+    const t = r.obj(raw2, p);
+    if (!t) return [];
+    r.exact(t, ['id', 'rect'], p);
+    return [{ id: r.str(t, 'id', p), rect: rectOf(r, t.rect, `${p}.rect`) }];
+  });
+  const mg = r.obj(o.mangrove, `${path}.mangrove`);
+  if (mg) {
+    r.exact(mg, ['band', 'shores'], `${path}.mangrove`);
+    out.mangrove = { band: positive(r, r.num(mg, 'band', `${path}.mangrove`), `${path}.mangrove.band`), shores: strList(r, mg.shores, `${path}.mangrove.shores`) };
+    const ids = new Set(out.tidalShores.map((t) => t.id));
+    for (const sid of out.mangrove.shores) if (!ids.has(sid)) r.problems.push(`${path}.mangrove.shores: unknown tidal shore "${sid}"`);
+  }
+  const fo = r.obj(o.forest, `${path}.forest`);
+  if (fo) {
+    const p = `${path}.forest`;
+    r.exact(fo, ['density', 'noise', 'clearing_below'], p);
+    const nz = r.obj(fo.noise, `${p}.noise`);
+    const noise = { wavelength: NaN, octaves: NaN, persistence: NaN };
+    if (nz) {
+      r.exact(nz, ['wavelength', 'octaves', 'persistence'], `${p}.noise`);
+      noise.wavelength = positive(r, r.num(nz, 'wavelength', `${p}.noise`), `${p}.noise.wavelength`);
+      noise.octaves = r.num(nz, 'octaves', `${p}.noise`);
+      if (!Number.isInteger(noise.octaves) || noise.octaves < 1 || noise.octaves > 8) r.problems.push(`${p}.noise.octaves: expected an integer in [1, 8]`);
+      noise.persistence = r.num(nz, 'persistence', `${p}.noise`);
+      if (!(noise.persistence > 0 && noise.persistence < 1)) r.problems.push(`${p}.noise.persistence: expected a number in (0, 1)`);
+    }
+    out.forest = { density: fraction(r, r.num(fo, 'density', p), `${p}.density`), noise, clearingBelow: fraction(r, r.num(fo, 'clearing_below', p), `${p}.clearing_below`) };
+  }
+  out.settlements = listOf(r, o.settlements, `${path}.settlements`).flatMap((raw2, i) => {
+    const p = `${path}.settlements[${i}]`;
+    const st = r.obj(raw2, p);
+    if (!st) return [];
+    r.exact(st, ['id', 'at', 'radius', 'inspired_by'], p);
+    const s: LandCoverSpec['settlements'][number] = { id: r.str(st, 'id', p), at: r.point(st.at, `${p}.at`), radius: positive(r, r.num(st, 'radius', p), `${p}.radius`) };
+    const ins = r.optStr(st, 'inspired_by', p);
+    if (ins !== undefined) s.inspiredBy = ins;
+    return [s];
+  });
+  const rf = r.obj(o.refine, `${path}.refine`);
+  if (rf) {
+    r.exact(rf, ['bare_slope', 'water_margin'], `${path}.refine`);
+    out.refine = { bareSlope: positive(r, r.num(rf, 'bare_slope', `${path}.refine`), `${path}.refine.bare_slope`), waterMargin: r.num(rf, 'water_margin', `${path}.refine`) };
+    if (out.refine.waterMargin < 0) r.problems.push(`${path}.refine.water_margin: must be >= 0`);
+  }
+  const sh = r.obj(o.shares, `${path}.shares`);
+  if (sh) {
+    r.exact(sh, ['urban', 'wetland'], `${path}.shares`);
+    out.shares = { urban: bandOf(r, sh.urban, `${path}.shares.urban`), wetland: bandOf(r, sh.wetland, `${path}.shares.wetland`) };
+  }
+  return out;
+}
+
+function parseRivers(r: Reader, raw: unknown): RiversSpec {
+  const path = 'rivers';
+  const out: RiversSpec = { seed: NaN, accumulationMinKm2: NaN, maxWidth: NaN, mouthTolerance: NaN, items: [] };
+  const o = r.obj(raw, path);
+  if (!o) return out;
+  r.exact(o, ['seed', 'accumulation_min_km2', 'max_width', 'mouth_tolerance', 'items'], path);
+  out.seed = r.num(o, 'seed', path);
+  out.accumulationMinKm2 = positive(r, r.num(o, 'accumulation_min_km2', path), `${path}.accumulation_min_km2`);
+  out.maxWidth = positive(r, r.num(o, 'max_width', path), `${path}.max_width`);
+  out.mouthTolerance = positive(r, r.num(o, 'mouth_tolerance', path), `${path}.mouth_tolerance`);
+  out.items = listOf(r, o.items, `${path}.items`).flatMap((raw2, i) => {
+    const p = `${path}.items[${i}]`;
+    const it = r.obj(raw2, p);
+    if (!it) return [];
+    r.exact(it, ['id', 'inspired_by', 'mouth', 'outlet', 'guide'], p);
+    const river: RiverOutlet = {
+      id: r.str(it, 'id', p),
+      mouth: r.point(it.mouth, `${p}.mouth`),
+      guide: it.guide === undefined ? [] : r.points(it.guide, `${p}.guide`, 0),
+    };
+    const ins = r.optStr(it, 'inspired_by', p);
+    if (ins !== undefined) river.inspiredBy = ins;
+    if (it.outlet !== undefined) {
+      const ot = r.obj(it.outlet, `${p}.outlet`);
+      if (ot) {
+        r.exact(ot, ['water_body'], `${p}.outlet`);
+        river.outlet = { waterBody: r.str(ot, 'water_body', `${p}.outlet`) };
+      }
+    }
+    return [river];
+  });
+  return out;
+}
+
+function parseCanal(r: Reader, raw: unknown): CanalSpec {
+  const path = 'canal';
+  const out: CanalSpec = { route: '', width: NaN, seaLevel: NaN, lakeLevel: NaN, apron: NaN, locks: [], bridgeLandmarks: [] };
+  const o = r.obj(raw, path);
+  if (!o) return out;
+  r.exact(o, ['route', 'width', 'sea_level', 'lake_level', 'apron', 'locks', 'bridge_landmarks'], path);
+  out.route = r.str(o, 'route', path);
+  out.width = positive(r, r.num(o, 'width', path), `${path}.width`);
+  out.seaLevel = r.num(o, 'sea_level', path);
+  out.lakeLevel = r.num(o, 'lake_level', path);
+  if (!(out.lakeLevel > out.seaLevel)) r.problems.push(`${path}.lake_level: must be above sea_level`);
+  out.apron = r.num(o, 'apron', path);
+  if (out.apron < 0) r.problems.push(`${path}.apron: must be >= 0`);
+  out.locks = listOf(r, o.locks, `${path}.locks`).flatMap((raw2, i) => {
+    const p = `${path}.locks[${i}]`;
+    const lk = r.obj(raw2, p);
+    if (!lk) return [];
+    r.exact(lk, ['id', 'landmark', 'inspired_by', 'steps', 'chamber'], p);
+    const steps = r.num(lk, 'steps', p);
+    if (!Number.isInteger(steps) || steps < 1) r.problems.push(`${p}.steps: expected an integer >= 1`);
+    const chamber = r.pair(lk.chamber, `${p}.chamber`);
+    if (!(chamber[0] > chamber[1] && chamber[1] > 0)) r.problems.push(`${p}.chamber: expected [length, width] with length > width > 0`);
+    const lock: LockSpec = { id: r.str(lk, 'id', p), landmark: r.str(lk, 'landmark', p), steps, chamber };
+    const ins = r.optStr(lk, 'inspired_by', p);
+    if (ins !== undefined) lock.inspiredBy = ins;
+    return [lock];
+  });
+  out.bridgeLandmarks = strList(r, o.bridge_landmarks, `${path}.bridge_landmarks`);
+  return out;
+}
+
+function parseWaterBodies(r: Reader, raw: unknown): WaterBody[] {
+  return listOf(r, raw, 'water_bodies').flatMap((raw2, i) => {
+    const p = `water_bodies[${i}]`;
+    const b = r.obj(raw2, p);
+    if (!b) return [];
+    r.exact(b, ['id', 'kind', 'inspired_by', 'polygon', 'of', 'islands'], p);
+    const kind = r.str(b, 'kind', p);
+    if (kind !== '' && kind !== 'lake' && kind !== 'inlet') r.problems.push(`${p}.kind: expected "lake" or "inlet"`);
+    const body: WaterBody = { id: r.str(b, 'id', p), kind: kind === 'inlet' ? 'inlet' : 'lake', polygon: r.points(b.polygon, `${p}.polygon`, 3) };
+    const ins = r.optStr(b, 'inspired_by', p);
+    if (ins !== undefined) body.inspiredBy = ins;
+    if (body.kind === 'inlet') {
+      body.of = r.str(b, 'of', p);
+      if (b.islands !== undefined) r.problems.push(`${p}.islands: only valid on a lake`);
+    } else {
+      if (b.of !== undefined) r.problems.push(`${p}.of: only valid on an inlet`);
+      if (b.islands !== undefined) {
+        const isl = r.obj(b.islands, `${p}.islands`);
+        if (isl) {
+          r.exact(isl, ['seed', 'count'], `${p}.islands`);
+          body.islands = { seed: r.num(isl, 'seed', `${p}.islands`), count: r.num(isl, 'count', `${p}.islands`) };
+        }
+      }
+    }
+    return [body];
+  });
+}
+
+function parseAirports(r: Reader, raw: unknown): AirportSpec[] {
+  return listOf(r, raw, 'airports').flatMap((raw2, i) => {
+    const p = `airports[${i}]`;
+    const a = r.obj(raw2, p);
+    if (!a) return [];
+    r.exact(a, ['id', 'inspired_by', 'runways', 'runway_length', 'runway_spacing', 'terminal', 'cargo', 'flatten', 'taxiway'], p);
+    const tw = r.obj(a.taxiway, `${p}.taxiway`);
+    if (tw) r.exact(tw, ['width'], `${p}.taxiway`);
+    const ap: AirportSpec = {
+      id: r.str(a, 'id', p),
+      runways: strList(r, a.runways, `${p}.runways`),
+      runwayLength: positive(r, r.num(a, 'runway_length', p), `${p}.runway_length`),
+      runwaySpacing: positive(r, r.num(a, 'runway_spacing', p), `${p}.runway_spacing`),
+      terminal: r.str(a, 'terminal', p),
+      cargo: r.str(a, 'cargo', p),
+      flatten: r.str(a, 'flatten', p),
+      taxiway: { width: tw ? positive(r, r.num(tw, 'width', `${p}.taxiway`), `${p}.taxiway.width`) : NaN },
+    };
+    const ins = r.optStr(a, 'inspired_by', p);
+    if (ins !== undefined) ap.inspiredBy = ins;
+    return [ap];
+  });
+}
+
+const MAIN_NODE_KINDS: readonly string[] = ['hub', 'gateway', 'junction', 'waypoint', 'landfall'];
+const ROAD_CLASSES: readonly string[] = ['highway', 'arterial'];
+
+function parseMainRoads(r: Reader, raw: unknown): MainRoadsSpec {
+  const path = 'main_roads';
+  const out: MainRoadsSpec = {
+    params: {
+      maxGrade: { highway: NaN, arterial: NaN },
+      cost: { k: NaN, s0: NaN },
+      minInterchange: NaN,
+      bridge: { abutment: NaN, canalClearance: NaN, riverClearance: NaN },
+      viaduct: { offset: nan2, deckAboveSea: NaN, pierSpacing: NaN },
+      sampleStep: NaN,
+    },
+    nodes: [],
+    roads: [],
+    coastway: { id: '', boulevard: '', viaduct: { road: '', side: 'bay', around: '' }, strip: { kind: '', capHeight: NaN, polygon: [] } },
+  };
+  const o = r.obj(raw, path);
+  if (!o) return out;
+  r.exact(o, ['params', 'nodes', 'roads', 'coastway'], path);
+
+  const pr = r.obj(o.params, `${path}.params`);
+  if (pr) {
+    const pp = `${path}.params`;
+    r.exact(pr, ['max_grade', 'cost', 'min_interchange', 'bridge', 'viaduct', 'sample_step'], pp);
+    const mg = r.obj(pr.max_grade, `${pp}.max_grade`);
+    if (mg) {
+      r.exact(mg, ROAD_CLASSES, `${pp}.max_grade`);
+      for (const c of ['highway', 'arterial'] as const) {
+        const v = r.num(mg, c, `${pp}.max_grade`);
+        if (!(v > 0 && v < 1)) r.problems.push(`${pp}.max_grade.${c}: expected a grade in (0, 1)`);
+        out.params.maxGrade[c] = v;
+      }
+    }
+    const cs = r.obj(pr.cost, `${pp}.cost`);
+    if (cs) {
+      r.exact(cs, ['k', 's0'], `${pp}.cost`);
+      out.params.cost = { k: r.num(cs, 'k', `${pp}.cost`), s0: positive(r, r.num(cs, 's0', `${pp}.cost`), `${pp}.cost.s0`) };
+    }
+    out.params.minInterchange = positive(r, r.num(pr, 'min_interchange', pp), `${pp}.min_interchange`);
+    const br = r.obj(pr.bridge, `${pp}.bridge`);
+    if (br) {
+      r.exact(br, ['abutment', 'canal_clearance', 'river_clearance'], `${pp}.bridge`);
+      out.params.bridge = {
+        abutment: r.num(br, 'abutment', `${pp}.bridge`),
+        canalClearance: r.num(br, 'canal_clearance', `${pp}.bridge`),
+        riverClearance: r.num(br, 'river_clearance', `${pp}.bridge`),
+      };
+    }
+    const vd = r.obj(pr.viaduct, `${pp}.viaduct`);
+    if (vd) {
+      r.exact(vd, ['offset', 'deck_above_sea', 'pier_spacing'], `${pp}.viaduct`);
+      const offset = r.pair(vd.offset, `${pp}.viaduct.offset`);
+      if (!(offset[0] > 0 && offset[0] < offset[1])) r.problems.push(`${pp}.viaduct.offset: expected [min, max] with 0 < min < max`);
+      out.params.viaduct = {
+        offset,
+        deckAboveSea: r.num(vd, 'deck_above_sea', `${pp}.viaduct`),
+        pierSpacing: positive(r, r.num(vd, 'pier_spacing', `${pp}.viaduct`), `${pp}.viaduct.pier_spacing`),
+      };
+    }
+    out.params.sampleStep = positive(r, r.num(pr, 'sample_step', pp), `${pp}.sample_step`);
+  }
+
+  const seenNodes = new Set<string>();
+  out.nodes = listOf(r, o.nodes, `${path}.nodes`).flatMap((raw2, i) => {
+    const p = `${path}.nodes[${i}]`;
+    const n = r.obj(raw2, p);
+    if (!n) return [];
+    r.exact(n, ['id', 'at', 'kind', 'landmark', 'inspired_by'], p);
+    const kind = r.str(n, 'kind', p);
+    if (kind !== '' && !MAIN_NODE_KINDS.includes(kind)) r.problems.push(`${p}.kind: expected one of ${MAIN_NODE_KINDS.join(', ')}`);
+    const node: MainNode = { id: r.str(n, 'id', p), at: r.point(n.at, `${p}.at`), kind: kind as MainNodeKind };
+    if (seenNodes.has(node.id)) r.problems.push(`${p}.id: duplicate node "${node.id}"`);
+    seenNodes.add(node.id);
+    const lm = r.optStr(n, 'landmark', p);
+    if (lm !== undefined) node.landmark = lm;
+    const ins = r.optStr(n, 'inspired_by', p);
+    if (ins !== undefined) node.inspiredBy = ins;
+    return [node];
+  });
+
+  const seenRoads = new Set<string>();
+  out.roads = listOf(r, o.roads, `${path}.roads`).flatMap((raw2, i) => {
+    const p = `${path}.roads[${i}]`;
+    const rd = r.obj(raw2, p);
+    if (!rd) return [];
+    r.exact(rd, ['id', 'inspired_by', 'class', 'structure', 'max_grade', 'elevated', 'supersedes', 'chain', 'bridges'], p);
+    const cls = r.str(rd, 'class', p);
+    if (cls !== '' && !ROAD_CLASSES.includes(cls)) r.problems.push(`${p}.class: expected highway or arterial`);
+    const structure = rd.structure ?? 'at-grade';
+    if (structure !== 'at-grade' && structure !== 'viaduct') r.problems.push(`${p}.structure: expected "at-grade" or "viaduct"`);
+    const chain = strList(r, rd.chain, `${p}.chain`);
+    if (chain.length < 2) r.problems.push(`${p}.chain: needs at least 2 nodes`);
+    for (const nid of chain) if (!seenNodes.has(nid)) r.problems.push(`${p}.chain: unknown node "${nid}"`);
+    const road: MainRoad = {
+      id: r.str(rd, 'id', p),
+      class: cls as RoadClass,
+      structure: structure === 'viaduct' ? 'viaduct' : 'at-grade',
+      elevated: rd.elevated === true,
+      supersedes: rd.supersedes === undefined ? [] : strList(r, rd.supersedes, `${p}.supersedes`),
+      chain,
+      bridges: [],
+    };
+    if (seenRoads.has(road.id)) r.problems.push(`${p}.id: duplicate road "${road.id}"`);
+    seenRoads.add(road.id);
+    const mg = r.optNum(rd, 'max_grade', p);
+    if (mg !== undefined) {
+      if (!(mg > 0 && mg < 1)) r.problems.push(`${p}.max_grade: expected a grade in (0, 1)`);
+      road.maxGrade = mg;
+    }
+    const ins = r.optStr(rd, 'inspired_by', p);
+    if (ins !== undefined) road.inspiredBy = ins;
+    if (rd.bridges !== undefined) {
+      road.bridges = listOf(r, rd.bridges, `${p}.bridges`).flatMap((raw3, j) => {
+        const bp = `${p}.bridges[${j}]`;
+        const b = r.obj(raw3, bp);
+        if (!b) return [];
+        r.exact(b, ['id', 'over', 'at', 'span', 'landmark'], bp);
+        const bridge: BridgeDecl = { id: r.str(b, 'id', bp), over: r.str(b, 'over', bp), at: r.point(b.at, `${bp}.at`), span: positive(r, r.num(b, 'span', bp), `${bp}.span`) };
+        const lm = r.optStr(b, 'landmark', bp);
+        if (lm !== undefined) bridge.landmark = lm;
+        return [bridge];
+      });
+    }
+    return [road];
+  });
+
+  const co = r.obj(o.coastway, `${path}.coastway`);
+  if (co) {
+    const cp = `${path}.coastway`;
+    r.exact(co, ['id', 'boulevard', 'viaduct', 'strip'], cp);
+    const vi = r.obj(co.viaduct, `${cp}.viaduct`);
+    let viaduct = out.coastway.viaduct;
+    if (vi) {
+      r.exact(vi, ['road', 'side', 'around'], `${cp}.viaduct`);
+      if (vi.side !== 'bay') r.problems.push(`${cp}.viaduct.side: only "bay" is allowed (the map has no sea south of the old quarter)`);
+      viaduct = { road: r.str(vi, 'road', `${cp}.viaduct`), side: 'bay', around: r.str(vi, 'around', `${cp}.viaduct`) };
+    }
+    const st = r.obj(co.strip, `${cp}.strip`);
+    let strip = out.coastway.strip;
+    if (st) {
+      r.exact(st, ['kind', 'cap_height', 'polygon'], `${cp}.strip`);
+      strip = { kind: r.str(st, 'kind', `${cp}.strip`), capHeight: r.num(st, 'cap_height', `${cp}.strip`), polygon: r.points(st.polygon, `${cp}.strip.polygon`, 3) };
+    }
+    out.coastway = { id: r.str(co, 'id', cp), boulevard: r.str(co, 'boulevard', cp), viaduct, strip };
+    if (out.coastway.boulevard !== '' && !seenRoads.has(out.coastway.boulevard)) r.problems.push(`${cp}.boulevard: unknown road "${out.coastway.boulevard}"`);
+    const vr = out.roads.find((x) => x.id === viaduct.road);
+    if (viaduct.road !== '' && (!vr || vr.structure !== 'viaduct')) r.problems.push(`${cp}.viaduct.road: "${viaduct.road}" is not a road with structure: viaduct`);
+  }
+  return out;
 }

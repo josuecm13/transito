@@ -10,13 +10,13 @@ export const landmarkTriggers: GamePlugin = {
   name: 'landmark-triggers',
   dependsOn: ['world-data', 'player'],
   setup(ctx) {
-    const { slice } = ctx.services.get(WorldDataKey);
+    const { slice, terrain } = ctx.services.get(WorldDataKey);
     const prompt = createPrompt(ctx.ui);
 
     for (const l of slice.landmarks) {
       if (l.triggerRadius === undefined) continue;
       ctx.ecs.add({
-        position: specToScene(l.position),
+        position: specToScene(l.position, terrain.heightAt(l.position.x, l.position.y)),
         trigger: { radius: l.triggerRadius, label: l.displayName ?? l.id, inside: false },
       });
     }

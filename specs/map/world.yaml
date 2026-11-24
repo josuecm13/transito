@@ -97,8 +97,8 @@ landmarks:
   - { id: lake-islands,     district: gatun-lake,     x: 1500, y: 5000, kind: nature,      on_water: true, notes: "jungle islands along the shipping channel" }
   - { id: ridge-overlook,   district: jungle-ridge,   x: 4300, y: 4300, kind: nature,      notes: "highway summit; both oceans on screen" }
   - { id: caribbean-cove,   district: jungle-ridge,   x: 4500, y: 6650, kind: nature,      notes: "hidden Caribbean cove east of Colón; El Consorcio's landing point (Act 6)" }
-  - { id: gamboa,           district: canal-central,  x: 1300, y: 3600, kind: town,        notes: "old canal-zone village, dredge yard" }
-  - { id: cable-bridge,     district: canal-central,  x: 700,  y: 3300, kind: bridge,      on_water: true, notes: "cable-stayed highway bridge over the cut" }
+  - { id: gamboa,           district: canal-central,  x: 1400, y: 3600, kind: town,        notes: "old canal-zone village, dredge yard; on the east bank of the channel (centreline at y=3600 is x=1300)" }
+  - { id: cable-bridge,     district: canal-central,  x: 1262, y: 3300, kind: bridge,      on_water: true, notes: "cable-stayed highway bridge over the cut; on the canal channel (canal centreline at y=3300 is x=1262.5)" }
 
   # Pacific side
   - { id: pacific-locks,    district: pacific-locks,  x: 1400, y: 1500, kind: canal,       notes: "two-step Pacific locks, visitor center" }
@@ -241,6 +241,10 @@ street_styles:
 # lot = grid pitch (m); footprint/height = [min, max] m; setback = clearance from street edge (m);
 # fill = probability a lot gets a building; angle = lot-grid rotation (deg) so nothing is axis-aligned;
 # landmark_clearance = no buildings within this radius (m) of any landmark.
+# method: parcels (default) = one centred building per parcel, from the numbers above.
+# method: frontage-lots     = buildings laid along each block's street frontage from a measured
+#   fingerprint (`frontage_lots`, see README "Streets"); lot/footprint/height/setback/fill/angle
+#   are then unused by the generator (kept: the map validator still reads them).
 blockout:
   seed: 1
   landmark_clearance: 18
@@ -273,13 +277,266 @@ blockout:
     airport:        { lot: 70, footprint: [20, 45], height: [6, 14],  setback: 15, fill: 0.2,  angle: 0 }
     costa-del-este: { lot: 40, footprint: [14, 24], height: [20, 60], setback: 8,  fill: 0.5,  angle: -8 }
 
+# Terrain relief of the active area (heights in meters above sea level, z of the spec plane).
+# Deterministic height model, see "Relief" in README.md. Calibrate SLOPES to reality, not heights:
+# the map compresses horizontal distance ~1:4 in the corridor, so real heights would read ~4x too
+# steep. Real slopes measured from AWS Terrain Tiles (Mapzen terrarium, ~5 m cells) in 800 m squares.
+relief:
+  seed: 11
+  # Water side: the sea floor falls away from the shoreline, so no cliff shows at the coast.
+  sea_floor: { slope: 0.08, min_height: -8 }     # m per m offshore; floor in m
+  # Land side: height = slope * distance inland from geometry.land, capped. Zero at the coast.
+  coastal_ramp:
+    slope: 0.004          # m per m inland (0.4 %)
+    max_height: 14        # m, plateau of the ramp
+    noise_taper: 150      # m inland over which all noise fades in, so the shoreline stays at 0
+  land_floor: 0.5         # m, inland ground never drops below this (drainage floor, fades in with the noise)
+  # Rolling terrain of the whole corridor (Juan Díaz / Pedregal / Tocumen scale), faded out inside hills.
+  rolling:
+    amplitude: 19         # m
+    wavelength: 380       # m, of the lowest octave
+    octaves: 3
+    persistence: 0.45     # amplitude multiplier per octave (wavelength halves each octave)
+  # Authored hill features. The mask is 1 inside core_radius and falls smoothly to 0 at radius;
+  # inside it the rolling noise is replaced by the hill's own noise.
+  hills:
+    - id: san-miguelito
+      inspired_by: "San Miguelito hills (Samaria, Torrijos-Carter), steep and maze-like"
+      at: [4500, 3400]    # m, = landmark miguelito-hills
+      core_radius: 450    # m, full effect
+      radius: 1000        # m, effect ends
+      uplift: 38          # m added at the core on top of the ramp
+      noise: { amplitude: 30, wavelength: 330, octaves: 4, persistence: 0.55 }
+  # Flat zones. `level: auto` = mean terrain height under the zone; `cap` = height never exceeds it
+  # (reclaimed land). Each blends back to the natural terrain over `blend` meters outside the rect.
+  flatten:
+    # Zones apply in this order, the last wins where they overlap: the airport comes last so the cap of the
+    # reclaimed land never tilts a runway. Its rect starts 150 m clear of the shore and its blend stops short of
+    # it (blend < distance to the coast), so the shoreline stays at sea level (coast_tolerance).
+    - { id: costa-del-este,   rect: [[4000, 0], [5000, 1800]],   cap: 3,      blend: 250 }   # reclaimed, near sea level
+    - { id: tocumen-airport,  rect: [[5000, 450], [6000, 2100]], level: auto, blend: 160 }   # runways + apron
+  # Every landmark in the active area gets a level pad so its marker and trigger sit on flat ground.
+  landmark_pads: { radius: 25, blend: 45 }          # m
+  # Street grading: a road surface takes the terrain height at its centerline (no cross-slope) and
+  # its longitudinal grade never exceeds max_grade; the ground blends back to the terrain over `shoulder`.
+  streets:
+    max_grade: 0.22       # rise / run (22 %)
+    shoulder: 14          # m, beyond carriageway + sidewalk + 2 m
+  # Linear relief features of the whole isthmus (layer 2, issue I2): height = amplitude * exp(-(s/width)^2)
+  # with s = signed distance to the polyline, plus along-ridge noise, merged with hills by smooth-max.
+  ridges:
+    - id: north-wall
+      inspired_by: "hill wall 150-450 m north of the corridor"
+      points: [[4300, 4300], [5000, 4600], [5800, 4400]]   # m, crest polyline; starts at landmark ridge-overlook
+      width: 250          # m, half-width at 1/e
+      amplitude: 100      # m, crest height above the base terrain
+    - id: continental-divide
+      inspired_by: "Continental Divide"
+      points: [[3300, 5700], [4300, 5100], [5500, 5500]]   # m; the Transístmica crosses it near (3500, 5500)
+      width: 330          # m
+      amplitude: 130      # m
+  # Regional uplift of the whole isthmus OUTSIDE the active area (layer 2): height + noise, faded in over
+  # rect_blend m beyond the active rect and over coast_blend m inland from the shore, so the calibrated
+  # plain of the active area and the shoreline (|h| <= coast_tolerance) are untouched. Calibrated against
+  # the isthmus-wide slope and elevation bands in tests/terrain.test.ts.
+  upland:
+    height: 75
+    rect_blend: 1200
+    ridge_rect_blend: 300     # m, ridges fade in over this distance beyond the active rect (a crest 300 m out is full height)
+    coast_blend: 400
+    noise: { amplitude: 8, wavelength: 500, octaves: 4, persistence: 0.5 }
+  # Baked height grid (shared by physics heightfield, ground rendering and every query).
+  grid:
+    cell: 4               # m between samples (active area)
+    margin: 120           # m beyond the active rect, so the skirt has no cliff next to the walls
+    far: { cell: 16 }     # m between samples outside the active rect (whole isthmus, layers 1-5); same origin (0, 0) as the fine grid
+  # What tests/terrain.test.ts enforces. Real values, 800 m squares, 5 m cells (AWS Terrain Tiles):
+  #   Samaria 16.0 / 30.1 / 42.1 %  Torrijos-Carter 8.5 / 26.9 / 40.0 %  (slope p50 / p90 / p99)
+  #   Pedregal 6.3 / 12.7 %  Las Mañanitas 8.5 / 16.5 %  Tocumen 6.0 / 10.8 %  Juan Díaz 4.5 / 8.5 %
+  targets:
+    hills:  { slope_p50: [0.12, 0.20], slope_p90: [0.24, 0.36], slope_p99_max: 0.55 }   # Samaria band, +-25 %
+    plain:  { slope_p50: [0.035, 0.085], slope_p90: [0.075, 0.175], slope_max: 0.45 }   # Juan Díaz .. Las Mañanitas
+    runway_flat_tolerance: 0.05    # m, max height difference along a runway centerline
+    coast_tolerance: 0.5           # m, |height| on the shoreline
+
+# ---------------------------------------------------------------------------------------------
+# Map layers 1-5 (whole isthmus). See "Layers" in README.md. Everything below sits on top of the
+# unchanged geometry.land coastline and is generated in order: 1 land cover, 2 relief, 3 rivers +
+# canal + lake + locks, 4 airports, 5 main roads; layer N reads only layers < N. Layers 6-9
+# (secondary roads, streets, blocks, buildings) stay in the active area. The sections here are the
+# authored inputs; rivers' courses and cover classes are DERIVED later, not drawn here.
+
+# Layer 1: land cover (jungle). Class shares are planned from OpenStreetMap figures (no new dependency).
+land_cover:
+  seed: 21
+  classes: [water, mangrove, forest, clearing, grass, urban_prior, park_reclaimed]   # water = outside land / water bodies
+  # Tidal shores: coast inside each rect is mangrove within mangrove.band. Rect = [[min x, min y], [max x, max y]], m.
+  tidal_shores:
+    - { id: tocumen-estuary,  rect: [[4700, 100], [6000, 600]] }      # south-east estuary, east of the Juan Díaz mouth
+    - { id: limon-bay-inner,  rect: [[0, 6800], [1400, 7500]] }       # Limón Bay inner shore
+    - { id: caribbean-flats,  rect: [[3500, 6500], [5600, 7000]] }    # Caribbean coast east of Colón
+  mangrove: { band: 250, shores: [tocumen-estuary, limon-bay-inner, caribbean-flats] }   # band in m, inland from the tidal shore
+  forest:
+    density: 0.75             # 0-1, inland jungle density f0
+    noise: { wavelength: 400, octaves: 3, persistence: 0.5 }   # m of the lowest octave; amplitude multiplier per octave
+    clearing_below: 0.25      # 0-1, forest density under this becomes clearing
+  # Authored urban discs (cover prior); real towns inspire placement. Water and rivers override at read time.
+  settlements:
+    - { id: colon-urban,     at: [1750, 7050], radius: 700, inspired_by: "Colón" }                          # m
+    - { id: panama-urban,    at: [3100, 1400], radius: 900, inspired_by: "Panama City (Calidonia, El Cangrejo)" }
+    - { id: corridor-urban,  at: [5000, 2800], radius: 600, inspired_by: "San Miguelito, Juan Díaz" }
+    - { id: balboa-urban,    at: [1500, 1100], radius: 500, inspired_by: "Balboa, Ancón" }
+  # Layer 1b, after relief (2) and rivers (3): a read-time re-mask of the class grid, not a new layer.
+  refine: { bare_slope: 0.60, water_margin: 12 }   # slope above bare_slope (rise/run) -> bare rock; water_margin m of bank kept wet
+  # Planned shares of land, checked by the validator on a 100 m sample. Source: OpenStreetMap landuse,
+  # lower bounds (informal areas are unmapped): built-up 11 % of 412 km² of land, tidal/wetland 15.7 km²
+  # (3.8 %). Band = [0.5 x, 1.5 x] of those. Jungle share is not banded.
+  shares:
+    urban:   [0.055, 0.165]   # fraction of geometry.land inside settlements
+    wetland: [0.019, 0.057]   # fraction of geometry.land inside mangrove bands
+  # Cover grid cell: relief.grid.far.cell.
+
+# Layer 3a: rivers. Authored outlets only; courses come from D8 flow on the relief (layer 2).
+rivers:
+  seed: 31
+  accumulation_min_km2: 0.04     # km², a cell stream starts above this drainage area
+  max_width: 40                  # m, widest river (the canal is separate)
+  mouth_tolerance: 10            # m, a mouth must lie this close to the geometry.land coastline, or to the shore of its `outlet.water_body` (validator)
+  items:
+    - { id: rio-abajo,     inspired_by: "Río Abajo",     mouth: [3300, 925],  guide: [[3400, 2500]] }                # mouth on the bayfront curve
+    - { id: rio-juan-diaz, inspired_by: "Río Juan Díaz", mouth: [4200, 625],  guide: [[4300, 2400], [4400, 3400]] }
+    - { id: rio-tocumen,   inspired_by: "Río Tocumen",   mouth: [4600, 500],  guide: [[4800, 1500]] }                # west of the airport flatten zone: the runways stay dry
+    # Lake-fed: rises in the jungle ridge east of the lake and FEEDS Gatún Lake (mouth on the lake shore, not the coast).
+    - { id: rio-chagres,   inspired_by: "Río Chagres",   mouth: [2650, 4750], outlet: { water_body: gatun-lake }, guide: [[3300, 4850], [4000, 4950], [4300, 5000]] }
+
+# Layer 3b: Panama Canal channel, Gatún Lake and locks. The channel is routes.canal (centreline, kept
+# on purpose west of the Pacific end) widened to `width`; the land polygon is not cut.
+canal:
+  route: canal                   # a routes entry of kind waterway
+  width: 120                     # m, channel width
+  sea_level: 0                   # m, channel water level on the Pacific and Caribbean reaches
+  lake_level: 12                 # m in map heights (real about 26 m, scaled like all heights; proposal)
+  apron: 60                      # m, flat concrete apron around each lock
+  # Chambers keep real size (305 x 34 m); at the lock landmarks; `steps` = chambers in the flight.
+  locks:
+    - { id: miraflores, landmark: pacific-locks,  inspired_by: "Miraflores locks", steps: 2, chamber: [305, 34] }
+    - { id: gatun,      landmark: atlantic-locks, inspired_by: "Gatún locks",      steps: 3, chamber: [305, 34] }
+  bridge_landmarks: [arch-bridge, cable-bridge]   # landmarks that must sit on the channel
+
+# Interior water that does not touch geometry.land: polygons wholly inside the land polygon.
+water_bodies:
+  - id: gatun-lake
+    kind: lake
+    inspired_by: "Gatún Lake"
+    polygon: [[560, 5950], [1000, 5900], [1450, 5800], [2100, 5750], [2500, 5500], [2700, 5000],
+              [2600, 4500], [2300, 4150], [1700, 3950], [1200, 4000], [900, 4500], [600, 5100], [450, 5650]]   # m; clear of routes.railroad and of the Gatún lock flight (south end)
+    islands: { seed: 41, count: 12 }   # generated inside the polygon (pipeline), not listed in geometry.islands
+  - id: gatun-canal-inlet
+    kind: inlet                    # arm of the lake along the canal toward Gamboa
+    of: gatun-lake
+    polygon: [[1291, 4100], [1451, 4100], [1409, 3800], [1249, 3800]]   # m; about 160 m wide around the canal centreline
+
+# Layer 4: airports. Runways are routes of kind runway (1,500 m each, as built); Albrook airfield is not built.
+airports:
+  - id: tocumen
+    inspired_by: "Tocumen International Airport"
+    runways: [runway-1, runway-2]
+    runway_length: 1500            # m, each (checked against routes)
+    runway_spacing: 700            # m, between the two centrelines (checked)
+    terminal: passenger-terminal   # landmark
+    cargo: cargo-terminal          # landmark
+    flatten: tocumen-airport       # relief.flatten id leveling the site
+    taxiway: { width: 23 }         # m, generated (auto) between runway ends and aprons
+
+# Layer 5: main roads, whole isthmus. Authored node chains; each consecutive pair becomes an edge routed
+# on the relief in I3. Hand-drawn `routes` stay fixed constraints until the layer replaces them.
+main_roads:
+  params:
+    max_grade: { highway: 0.06, arterial: 0.10 }   # rise/run per class (street grading max is relief.streets.max_grade)
+    cost: { k: 4, s0: 0.08 }                       # slope cost 1 + k (slope / s0)^2
+    min_interchange: 1500                          # m between interchanges
+    bridge: { abutment: 15, canal_clearance: 15, river_clearance: 4 }   # m; clearances in map heights (Bridge of the Americas about 61 m real)
+    viaduct: { offset: [50, 200], deck_above_sea: 6, pier_spacing: 25 } # m offshore band; deck m above sea; pier spacing m (visual)
+    sample_step: 25                                # m, validator sampling along edges
+  nodes:
+    # kind: hub | gateway (map edge) | junction | waypoint | landfall (viaduct ramp on land)
+    - { id: west-gateway,       at: [150, 1500],  kind: gateway }
+    - { id: balboa-approach,    at: [1050, 1050], kind: waypoint }
+    - { id: balboa-west,        at: [1230, 520],  kind: hub, inspired_by: "Balboa, west abutment of the Bridge of the Americas" }
+    - { id: balboa-east,        at: [1440, 520],  kind: hub, inspired_by: "Balboa, east abutment" }
+    - { id: albrook-link,       at: [1700, 900],  kind: waypoint }
+    - { id: city-mid,           at: [2300, 1500], kind: waypoint }
+    - { id: city-west,          at: [3000, 2200], kind: junction, inspired_by: "where the Transístmica used to meet the city" }
+    - { id: corridor-market,    at: [4600, 2400], kind: junction, landmark: corridor-market }
+    - { id: tito-home,          at: [5400, 2600], kind: hub,      landmark: tito-home }
+    - { id: east-gateway,       at: [5700, 2700], kind: gateway }
+    - { id: colon-gate,         at: [2500, 6500], kind: gateway }
+    - { id: transistmica-mid,   at: [3500, 5500], kind: waypoint }
+    - { id: ridge-overlook,     at: [4300, 4300], kind: waypoint, landmark: ridge-overlook }
+    - { id: miguelito-junction, at: [4500, 3400], kind: junction, landmark: miguelito-hills }
+    - { id: paitilla,           at: [3500, 1020], kind: hub, inspired_by: "Punta Paitilla" }
+    - { id: sur-1,              at: [3821, 771],  kind: waypoint }   # Corredor Sur: about 100 m inland of the shore
+    - { id: sur-2,              at: [4076, 697],  kind: waypoint }
+    - { id: sur-3,              at: [4545, 639],  kind: waypoint }
+    - { id: sur-4,              at: [4945, 439],  kind: waypoint }
+    - { id: airport-shore,      at: [5460, 315],  kind: hub }
+    - { id: casco-gate,         at: [2400, 400],  kind: gateway, inspired_by: "Casco Viejo, Cinta Costera 1" }
+    - { id: cinta-city,         at: [2700, 1200], kind: junction }
+    - { id: cinta-east,         at: [3600, 1300], kind: junction }
+    - { id: costa-gate,         at: [4500, 900],  kind: hub, inspired_by: "Costa del Este" }
+    - { id: casco-landfall,     at: [2540, 330],  kind: landfall }
+    - { id: viaduct-1,          at: [2699, 188],  kind: waypoint }   # about 100 m east of the old-quarter shore (bay side)
+    - { id: viaduct-2,          at: [2749, 588],  kind: waypoint }
+    - { id: viaduct-3,          at: [2811, 673],  kind: waypoint }
+    - { id: cinta-landfall,     at: [2850, 900],  kind: landfall }
+    - { id: passenger-terminal, at: [5600, 1700], kind: hub, landmark: passenger-terminal }
+    - { id: cargo-terminal,     at: [5300, 1200], kind: hub, landmark: cargo-terminal }
+  roads:
+    # class picks the street_profiles entry; structure: at-grade (default) | viaduct (offshore deck).
+    # supersedes = routes this road absorbs; they keep working until the layer is implemented (README "Layers").
+    - id: interamericana
+      inspired_by: "Carretera Panamericana (Bridge of the Americas, city, east past Tocumen)"
+      class: arterial          # keeps today's 14 m + sidewalks of corridor-avenue; highway profile is a director call at I3
+      supersedes: [corridor-avenue]
+      chain: [west-gateway, balboa-approach, balboa-west, balboa-east, albrook-link, city-mid, city-west, corridor-market, tito-home, east-gateway]
+      bridges:
+        - { id: bridge-of-the-americas, over: canal, at: [1335, 520], span: 150, landmark: arch-bridge }   # span m = 120 channel + 2 x 15 abutment
+    - id: transistmica
+      inspired_by: "Autopista Panamá-Colón"
+      class: highway
+      supersedes: [transisthmian-highway]    # its city end (Miguelito to the city) is carried by interamericana: it now ends at the corridor junction
+      chain: [colon-gate, transistmica-mid, ridge-overlook, miguelito-junction, corridor-market]
+    - id: corredor-sur
+      inspired_by: "Corredor Sur"
+      class: highway
+      max_grade: 0.04          # rise/run, overrides params.max_grade
+      elevated: true
+      chain: [paitilla, sur-1, sur-2, sur-3, sur-4, airport-shore]
+    - { id: paitilla-ramp, class: arterial, chain: [paitilla, cinta-east] }
+    - { id: city-link,     class: arterial, chain: [cinta-city, city-west] }
+    - id: cinta-costera
+      inspired_by: "Cinta Costera 1-3, Avenida Balboa"
+      class: arterial
+      supersedes: [coastal-avenue]
+      chain: [casco-gate, cinta-city, cinta-east, costa-gate]
+    - id: cinta-viaduct
+      inspired_by: "Cinta Costera 3 (Casco Viejo viaduct)"
+      class: arterial
+      structure: viaduct
+      chain: [casco-landfall, viaduct-1, viaduct-2, viaduct-3, cinta-landfall]
+    - { id: airport-access, class: arterial, chain: [tito-home, passenger-terminal, cargo-terminal] }
+  coastway:
+    id: cinta-costera
+    boulevard: cinta-costera       # a roads id
+    viaduct: { road: cinta-viaduct, side: bay, around: old-quarter }   # bay side only; around = landmark; no Corredor Norte
+    strip:                         # reclaimed linear park between boulevard and shore (layers 1 and 2 read it)
+      kind: park_reclaimed         # a land_cover class
+      cap_height: 3                # m, like costa-del-este
+      polygon: [[2637, 608], [2796, 865], [3204, 965], [3604, 865], [3636, 996], [3236, 1096], [2764, 996], [2521, 677]]   # m, inside land
+
 # Ambient population. Agents spawn out of view around the focus (the player) and despawn far away.
 population:
   pedestrians:
-# method: parcels (default) = one centred building per parcel, from the numbers above.
-# method: frontage-lots     = buildings laid along each block's street frontage from a measured
-#   fingerprint (`frontage_lots`, see README "Streets"); lot/footprint/height/setback/fill/angle
-#   are then unused by the generator (kept: the map validator still reads them).
     budget: 40              # max alive at once
     spawn_ring: [60, 140]   # meters from focus: spawn between min and max
     despawn_at: 180         # meters from focus

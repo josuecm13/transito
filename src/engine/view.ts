@@ -30,9 +30,11 @@ export async function createView(canvas: HTMLCanvasElement): Promise<View> {
   const sky = new Color(0x87ceeb);
   const scene = new Scene();
   scene.background = sky;
-  scene.fog = new Fog(sky, 120, 350);
+  // Soft haze: the whole isthmus has ground now, so distant ridges fade toward the sky instead of cutting
+  // off at 350 m. The top-down camera sits ~25 m above the ground and is unaffected.
+  scene.fog = new Fog(sky, 250, 3500);
 
-  const camera = new PerspectiveCamera(50, 1, 0.5, 2000);
+  const camera = new PerspectiveCamera(50, 1, 0.5, 5000);
 
   scene.add(new HemisphereLight(0xffffff, 0x556b2f, 1.2));
   const sun = new DirectionalLight(0xfff2d6, 2);

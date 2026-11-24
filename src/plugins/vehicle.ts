@@ -4,6 +4,7 @@ import type { GamePlugin } from '../ecs/plugin.ts';
 import type { Entity } from '../ecs/entity.ts';
 import { WorldDataKey } from './keys.ts';
 import { specToScene } from '../world/coords.ts';
+import { IGNORE_GROUND_GROUPS } from '../engine/physics.ts';
 import { findParkingSpot } from '../world/parking.ts';
 import { CAR, NO_INPUT, contactSpeed, stepVehicle, vehicleForward } from '../sim/vehicle.ts';
 import type { VehicleState } from '../sim/vehicle.ts';
@@ -15,7 +16,7 @@ import { createPrompt } from '../ui/prompt.ts';
 const CAR_BODY = {
   length: 4.2,
   width: 1.8,
-  /** Collision box: floats above the ground (wheel clearance) so it never touches the 5 km ground cuboid. */
+  /** Collision box: floats above the ground (wheel clearance); its shape-casts ignore the terrain collider (IGNORE_GROUND_GROUPS) and its height follows the terrain. */
   boxBottom: 0.3,
   boxHeight: 1.0,
   color: 0xd9480f,
@@ -27,6 +28,8 @@ const INTERACT = { doorRadius: 3, exitMaxSpeed: 3, exitSideOffset: 1.7, exitEndO
 /** Rotation test shape is a bit smaller than the collider, so the character controller's skin does not block turning. */
 const TURN_SHRINK = 0.04;
 const TITO_CENTER_Y = centerY(TITO_BODY);
+/** Tito steps out this far (m) above the ground, so the capsule never starts inside the heightfield. */
+const EXIT_LIFT = 0.05;
 
 const yawQuat = (yaw: number) => ({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) });
 /** Unit vector to the car's right (+X when yaw = 0). */
@@ -75,6 +78,9 @@ export const vehicle: GamePlugin = {
   dependsOn: ['world-data', 'world-physics', 'player'],
   setup(ctx) {
     const data = ctx.services.get(WorldDataKey);
+    const { terrain } = data;
+    /** Ground height at a scene point. */
+    const groundAt = (x: number, z: number): number => terrain.heightAt(x, -z);
     const { rapier: R, world } = ctx.physics;
 
     const spot = findParkingSpot(data.streets.graph, data.buildings, data.slice.spawn.position);
@@ -82,15 +88,15 @@ export const vehicle: GamePlugin = {
       console.warn('[vehicle] no parking spot near the spawn; no car this run');
       return;
     }
-    const p0 = specToScene(spot.position);
-    const car = { x: p0.x, z: p0.z };
+    const p0 = specToScene(spot.position, terrain.heightAt(spot.position.x, spot.position.y));
+    const car = { x: p0.x, y: p0.y, z: p0.z };
     let vs: VehicleState = { speed: 0, yaw: yawFacing(spot.heading.x, -spot.heading.y), steer: 0 };
 
     const halfX = CAR_BODY.width / 2;
     const halfZ = CAR_BODY.length / 2;
     const halfY = CAR_BODY.boxHeight / 2;
     const body = world.createRigidBody(
-      R.RigidBodyDesc.kinematicPositionBased().setTranslation(car.x, BOX_CENTER_Y, car.z).setRotation(yawQuat(vs.yaw)),
+      R.RigidBodyDesc.kinematicPositionBased().setTranslation(car.x, car.y + BOX_CENTER_Y, car.z).setRotation(yawQuat(vs.yaw)),
     );
     const collider = world.createCollider(R.ColliderDesc.cuboid(halfX, halfY, halfZ), body);
     const turnShape = new R.Cuboid(halfX - TURN_SHRINK, halfY - TURN_SHRINK, halfZ - TURN_SHRINK);
@@ -101,12 +107,32 @@ export const vehicle: GamePlugin = {
     controller.setSlideEnabled(true);
 
     const { root, frontWheels } = buildCarMesh();
-    root.position.set(car.x, 0, car.z);
+    root.rotation.order = 'YXZ'; // yaw, then pitch and roll in the car's own frame
+    root.position.set(car.x, car.y, car.z);
     root.rotation.y = vs.yaw;
+
+    /** Ground height under the car's four corners (mean) and its pitch / roll from the axle heights. */
+    const groundPose = (yaw: number): { y: number; pitch: number; roll: number } => {
+      const f = vehicleForward(yaw);
+      const r = rightOf(yaw);
+      const at = (along: number, side: number): number => groundAt(car.x + f.x * along + r.x * side, car.z + f.z * along + r.z * side);
+      const fl = at(halfZ, -halfX);
+      const fr = at(halfZ, halfX);
+      const bl = at(-halfZ, -halfX);
+      const br = at(-halfZ, halfX);
+      return {
+        y: (fl + fr + bl + br) / 4,
+        pitch: Math.atan2((fl + fr) / 2 - (bl + br) / 2, CAR_BODY.length),
+        roll: Math.atan2((fr + br) / 2 - (fl + bl) / 2, CAR_BODY.width),
+      };
+    };
+    let pose = groundPose(vs.yaw);
+    car.y = pose.y;
+    root.position.y = car.y;
     ctx.view.scene.add(root);
 
     const entity: Entity = ctx.ecs.add({
-      position: { x: car.x, y: 0, z: car.z },
+      position: { x: car.x, y: car.y, z: car.z },
       yaw: vs.yaw,
       vehicle: true,
       obstacle: { radius: CAR_BODY.obstacleRadius },
@@ -178,7 +204,7 @@ export const vehicle: GamePlugin = {
         at(0, INTERACT.exitEndOffset),
       ];
       return candidates.find(
-        (c) => !world.intersectionWithShape({ x: c.x, y: TITO_CENTER_Y + 0.05, z: c.z }, { x: 0, y: 0, z: 0, w: 1 }, titoShape, undefined, undefined, collider),
+        (c) => !world.intersectionWithShape({ x: c.x, y: groundAt(c.x, c.z) + TITO_CENTER_Y + EXIT_LIFT, z: c.z }, { x: 0, y: 0, z: 0, w: 1 }, titoShape, undefined, IGNORE_GROUND_GROUPS, collider),
       );
     };
 
@@ -188,8 +214,9 @@ export const vehicle: GamePlugin = {
       const spot2 = freeExitSpot();
       if (!parts || !spot2) return; // boxed in: stay inside
       vs = { ...vs, speed: 0, steer: 0 };
-      parts.body.setTranslation({ x: spot2.x, y: TITO_CENTER_Y, z: spot2.z }, true);
-      parts.body.setNextKinematicTranslation({ x: spot2.x, y: TITO_CENTER_Y, z: spot2.z });
+      const exitY = groundAt(spot2.x, spot2.z) + TITO_CENTER_Y + EXIT_LIFT;
+      parts.body.setTranslation({ x: spot2.x, y: exitY, z: spot2.z }, true);
+      parts.body.setNextKinematicTranslation({ x: spot2.x, y: exitY, z: spot2.z });
       parts.collider.setEnabled(true);
       const mesh = p.view?.object;
       if (mesh) mesh.visible = true;
@@ -237,26 +264,28 @@ export const vehicle: GamePlugin = {
         let yaw = next.yaw;
         if (yaw !== vs.yaw) {
           // Turning in place would swing the corners into whatever is beside the car: refuse it.
-          const hit = world.intersectionWithShape({ x: car.x, y: BOX_CENTER_Y, z: car.z }, yawQuat(yaw), turnShape, undefined, undefined, collider);
+          const hit = world.intersectionWithShape({ x: car.x, y: car.y + BOX_CENTER_Y, z: car.z }, yawQuat(yaw), turnShape, undefined, IGNORE_GROUND_GROUPS, collider);
           if (hit) yaw = vs.yaw;
         }
 
         let speed = next.speed;
         if (speed !== 0) {
           const f = vehicleForward(yaw);
-          controller.computeColliderMovement(collider, { x: f.x * speed * dt, y: 0, z: f.z * speed * dt });
+          controller.computeColliderMovement(collider, { x: f.x * speed * dt, y: 0, z: f.z * speed * dt }, undefined, IGNORE_GROUND_GROUPS);
           const m = controller.computedMovement();
           car.x += m.x;
           car.z += m.z;
           speed = contactSpeed(speed, yaw, m, dt);
         }
         vs = { speed, yaw, steer: next.steer };
-        body.setNextKinematicTranslation({ x: car.x, y: BOX_CENTER_Y, z: car.z });
+        pose = groundPose(yaw);
+        car.y = pose.y;
+        body.setNextKinematicTranslation({ x: car.x, y: car.y + BOX_CENTER_Y, z: car.z });
         body.setNextKinematicRotation(yawQuat(yaw));
 
         if (driving) {
           // Keep Tito's (disabled) body with the car, so player-sync and everything reading `player` follows it.
-          titoParts(p)?.body.setTranslation({ x: car.x, y: TITO_CENTER_Y, z: car.z }, true);
+          titoParts(p)?.body.setTranslation({ x: car.x, y: car.y + TITO_CENTER_Y, z: car.z }, true);
         }
       },
     });
@@ -266,10 +295,13 @@ export const vehicle: GamePlugin = {
       phase: 'update',
       run() {
         entity.position.x = car.x;
+        entity.position.y = car.y;
         entity.position.z = car.z;
         entity.yaw = vs.yaw;
-        root.position.set(car.x, 0, car.z);
+        root.position.set(car.x, car.y, car.z);
         root.rotation.y = vs.yaw;
+        root.rotation.x = pose.pitch;
+        root.rotation.z = pose.roll;
         for (const w of frontWheels) w.rotation.y = -vs.steer * 0.45;
 
         const p = players.first;

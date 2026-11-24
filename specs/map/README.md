@@ -125,6 +125,68 @@ metrics live in `street-metrics.yaml`.
   `ENGINE_URL` (default `http://localhost:58000`); a second run with no spec change leaves the file
   byte-identical.
 
+## Layers (map restart, layers 1-5)
+
+Everything on top of the unchanged coastline (`geometry.land`, bounds, islands, grid) is generated in
+layers. Layer N reads only the outputs of layers < N (enforced by `tests/layers-contract.test.ts`, a static
+import scan of `src/world/layers/`). Layers 1-5 cover the whole isthmus on a coarse grid
+(`relief.grid.far.cell`, 16 m, same origin as the active area's 4 m grid); layers 6-9 stay in the active area.
+
+| # | Layer | world.yaml section | Code (layers 1-3 generated; 4-5 skeletons) |
+|---|---|---|---|
+| 1 | Land cover / jungle | `land_cover` | `src/world/layers/layer1-land-cover.ts` |
+| 2 | Relief | `relief` (+ `ridges`, `grid.far`) | `layer2-relief.ts` |
+| 3 | Rivers, canal, Gatún Lake, locks | `rivers`, `canal`, `water_bodies` | `layer3-water.ts` |
+| 4 | Airports | `airports` | `layer4-airports.ts` |
+| 5 | Main roads | `main_roads` | `layer5-main-roads.ts` |
+| 6-9 | Secondary roads, streets, blocks, buildings (active area) | `street_styles`, `blockout` | existing generators |
+
+`runLayers(spec)` in `src/world/layers/index.ts` runs 1-5 in order. Each layer is a pure function
+`(spec, outputs of earlier layers) => LayerNOutput`; no I/O, clock or `Math.random`. The outputs are stubs
+(`generated: false`) until the generators land (layers 1-3 are generated; 4-5 are still stubs). Layer 1b (cover refinement after relief and rivers, `land_cover.refine`)
+is a read-time re-mask, not a new layer.
+
+New sections (all parsed strictly by `parseWorldSpec`: an unknown key is an error; checked by
+`python tools/render_map_preview.py`, which also draws them in `preview.svg`):
+
+- `land_cover`: class list, tidal shores (rects) with a mangrove band, forest density and noise, authored
+  settlement discs, the 1b refine thresholds and the planned urban / wetland shares (OpenStreetMap figures,
+  no new dependency; validator estimates them on a 100 m sample).
+- `rivers`: authored outlets only. Each `mouth` must be a shoreline point of `geometry.land` (within
+  `mouth_tolerance`), or, with `outlet: { water_body: <lake id> }`, a point of that lake's shore (a lake-fed river:
+  `rio-chagres` feeds Gatún Lake). Optional `guide` points are low-cost corridors, not polylines to copy: the
+  course is derived (layer 3, `layer3-water.ts`): priority-flood fill + D8 flow and accumulation on the 16 m far grid,
+  a least-cost trace from the last guide to the mouth (guide corridor, stream preference, climb penalty), a bed
+  that is monotone non-increasing source to mouth (running minimum), Leopold-Maddock width `w = a sqrt(A)`
+  capped by `max_width`, depth `0.3 w^0.8`, banks 1:4, bed rising to the water level at the mouth so the shoreline stays at 0.
+- `canal`: `route` (a waterway route = centreline) widened to `width`; locks sit at lock landmarks with real
+  305 x 34 m chambers (`steps` = chambers in the flight: water level `sea + (lake - sea) k / steps`, k = 1 at the sea side);
+  `bridge_landmarks` must lie on the channel. The land polygon is not cut. Heights: sea reaches at `sea_level`, the
+  stretch between the two flights at `lake_level` (12 m), channel bed 8 m under its water, lock flights on an apron
+  plateau 1.5 m above the lake level (grey blockout walls), banks cut at 1:3.6 into the relief.
+- `water_bodies`: Gatún Lake and its canal inlet as interior water; polygons must lie inside `geometry.land`,
+  and no hand-drawn route (except waterways) may cross them. The lake is a basin dug into H0 (floor 0.8 m under
+  the level at the shore, 6 m at 200 m in), flat surface at `lake_level`, banks rising 1:3.6 outside; `islands`
+  (seed, count) are generated inside the lake, off the shipping channel, summits 3-9 m above the water.
+  The polygon's south end stops short of the Gatún lock flight (flight centred on its landmark).
+- `airports`: Tocumen, two 1,500 m runways (routes of kind `runway`), terminal and cargo landmarks, the
+  `relief.flatten` zone. Albrook airfield is not built.
+- `main_roads`: authored node chains for Interamericana, Transístmica, Corredor Sur and Cinta Costera
+  (boulevard + reclaimed park strip + bay-side viaduct), plus params (max grade, bridge and viaduct rules).
+  A road may cross water only under a declared `bridges` entry or as a `structure: viaduct`. No Corredor Norte.
+- `relief.ridges`, `relief.grid.far`: whole-isthmus ridges and the 16 m far grid (read by `terrain.ts` since layer 2).
+
+Old fields these supersede (they keep working now; the switch happens when the layer is implemented in I2/I3,
+and the old entries are then removed):
+
+| Old | Replaced by | Note |
+|---|---|---|
+| `routes.corridor-avenue` | `main_roads` road `interamericana` | planned removal |
+| `routes.transisthmian-highway` | `main_roads` road `transistmica` | its city end (Miguelito to the city) is carried by the Interamericana; the Transístmica now ends at the corridor junction (planned removal) |
+| `routes.coastal-avenue` | `main_roads` road `cinta-costera` | planned removal |
+| `routes.canal` (line only) | stays as the centreline of `canal` | kept |
+| `routes.runway-1/2` | stay, referenced by `airports` | kept |
+
 ## Naming
 
 Until open question #3 is decided, places use working names; the real place that inspired each one
@@ -134,3 +196,13 @@ is recorded in `inspired_by`.
 
 Engine chunks are 250 m tiles → 24 × 32 = 768 tiles. Chunk ids derive from coordinates; districts
 are metadata on tiles, not load units.
+
+## Fragments
+
+Real-place inspiration, measured offline (never imported at runtime). `npm run geo -- <search |
+import | register | profile | status>` (`tools/geo-fragments.mjs`) drives the
+geospatial-reconstruction-engine: small squares (default 800 m, at most 2 km²) are registered in
+`specs/map/fragments/index.yaml` and profiled to `specs/map/fragments/<slug>.yaml` (streets, road
+classes, buildings with a `data_quality` note, block fill fingerprints, relief slope distribution,
+POIs; provenance and "© OpenStreetMap contributors" included). Streets use the same definition as
+`street-metrics.yaml`. Workflow and translation rules: skill `map-from-reality`.

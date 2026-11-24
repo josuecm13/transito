@@ -9,6 +9,10 @@ import { TITO_BODY, centerY } from '../sim/body.ts';
 const PLAYER = { walk: 4.2, run: 7.5, turnRate: 12 };
 const GRAVITY = 9.81;
 const MAX_FALL_SPEED = 30;
+/** Dropped onto the ground from this height (m) at spawn, so the capsule never starts inside the heightfield. */
+const SPAWN_LIFT = 0.1;
+/** Stays glued to the ground going downhill up to this step (m), instead of free-falling off every slope change. */
+const SNAP_TO_GROUND = 0.3;
 /** Distance from the feet to the capsule center. */
 const CENTER_Y = centerY(TITO_BODY);
 
@@ -16,7 +20,7 @@ export const player: GamePlugin = {
   name: 'player',
   dependsOn: ['world-data', 'world-physics'],
   setup(ctx) {
-    const { slice } = ctx.services.get(WorldDataKey);
+    const { slice, terrain } = ctx.services.get(WorldDataKey);
     const { rapier: R, world } = ctx.physics;
 
     let start = slice.spawn;
@@ -26,10 +30,10 @@ export const player: GamePlugin = {
       if (l) start = l;
       else console.warn(`[player] ?spawn="${wanted}" is not a landmark in the active slice; using default spawn`);
     }
-    const p0 = specToScene(start.position);
+    const p0 = specToScene(start.position, terrain.heightAt(start.position.x, start.position.y));
 
     const body = world.createRigidBody(
-      R.RigidBodyDesc.kinematicPositionBased().setTranslation(p0.x, p0.y + CENTER_Y, p0.z),
+      R.RigidBodyDesc.kinematicPositionBased().setTranslation(p0.x, p0.y + CENTER_Y + SPAWN_LIFT, p0.z),
     );
     const collider = world.createCollider(R.ColliderDesc.capsule(TITO_BODY.halfHeight, TITO_BODY.radius), body);
 
@@ -37,6 +41,8 @@ export const player: GamePlugin = {
     controller.setSlideEnabled(true);
     controller.enableAutostep(0.2, 0.1, false);
     controller.setMaxSlopeClimbAngle((50 * Math.PI) / 180);
+    controller.setMinSlopeSlideAngle((55 * Math.PI) / 180);
+    controller.enableSnapToGround(SNAP_TO_GROUND);
 
     const mesh = new Group();
     const mat = new MeshStandardMaterial({ color: 0x14b8c4 });

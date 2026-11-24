@@ -35,6 +35,10 @@ export const PALETTE = {
   runway: 0x7d8086,
   rail: 0x4a4038,
   waterway: 0x2a6a9a,
+  /** Rivers, Gatún Lake, the canal channel and lock chambers (same blue as the canal waterway). */
+  water: 0x2a6a9a,
+  lockWall: 0x9b9a96,
+  lockApron: 0xb3b0a7,
   building: 0x8a8a8a,
   street: {
     avenue: 0x2a2d31,
@@ -45,6 +49,16 @@ export const PALETTE = {
   centerSolid: 0xe2bf45,
   centerDashed: 0xeeeee6,
   blockGround: 0x9d978a,
+  /** Ground colour by land-cover class (layer 1) on the far ground outside the active area. */
+  cover: {
+    water: 0x1d4e7a,
+    mangrove: 0x5d6b3c,
+    forest: 0x2c5632,
+    clearing: 0x86974f,
+    grass: 0x78a05a,
+    urban_prior: 0xa59d8d,
+    park_reclaimed: 0x8dbb6a,
+  } as Record<string, number>,
   park: 0x679a4a,
   median: 0x6f9452,
   court: 0xb4573c,
@@ -80,7 +94,7 @@ const mat = (color: number): MeshStandardMaterial =>
  * whatever the depth-buffer precision. Everything standing on the ground (buildings, characters,
  * markers) writes depth as usual and is drawn afterwards.
  */
-const GROUND_ORDER = { sea: -3, land: -2, city: -1 } as const;
+const GROUND_ORDER = { sea: -3, land: -2, far: -1.5, apron: -1.45, water: -1.4, city: -1 } as const;
 
 function asGround<T extends Mesh>(mesh: T, order: number): T {
   mesh.renderOrder = order;
@@ -132,14 +146,21 @@ export interface GroundLayer {
   color: number;
 }
 
+/** Terrain the ground is draped over: height (m) and unit normal (spec axes: x east, y north, z up). */
+export interface GroundSurface {
+  heightAt(x: number, y: number): number;
+  normalAt(x: number, y: number): { x: number; y: number; z: number };
+}
+
 /**
  * Every layer merged into one BufferGeometry with vertex colours: a single draw call for the whole
  * ground (blocks, parks, sidewalks, carriageways, markings). Triangles are emitted in layer order and
  * the mesh does not write depth (see GROUND_ORDER), so later layers paint over earlier ones; `y`
- * only lifts them visually. Normals are straight up. Triangles must be CCW in the spec plane (they
- * then face +Y).
+ * only lifts them visually. Without a `surface` the ground is flat at y (normals straight up); with
+ * one every vertex takes `surface.heightAt + y` and the terrain normal, so the soups must already be
+ * subdivided (world/drape.ts). Triangles must be CCW in the spec plane (they then face +Y).
  */
-export function groundMesh(layers: readonly GroundLayer[], name = 'ground'): Mesh {
+export function groundMesh(layers: readonly GroundLayer[], name = 'ground', surface?: GroundSurface): Mesh {
   let n = 0;
   let m = 0;
   for (const l of layers) {
@@ -158,11 +179,20 @@ export function groundMesh(layers: readonly GroundLayer[], name = 'ground'): Mes
     const base = v;
     const p = l.soup.positions;
     for (let i = 0; i < p.length; i += 2) {
-      const s = specToScene({ x: p[i] as number, y: p[i + 1] as number }, l.y);
+      const px = p[i] as number;
+      const py = p[i + 1] as number;
+      const s = specToScene({ x: px, y: py }, l.y + (surface ? surface.heightAt(px, py) : 0));
       pos[v * 3] = s.x;
       pos[v * 3 + 1] = s.y;
       pos[v * 3 + 2] = s.z;
-      nor[v * 3 + 1] = 1;
+      if (surface) {
+        const n = surface.normalAt(px, py);
+        nor[v * 3] = n.x;
+        nor[v * 3 + 1] = n.z;
+        nor[v * 3 + 2] = -n.y;
+      } else {
+        nor[v * 3 + 1] = 1;
+      }
       col[v * 3] = c.r;
       col[v * 3 + 1] = c.g;
       col[v * 3 + 2] = c.b;
@@ -180,6 +210,103 @@ export function groundMesh(layers: readonly GroundLayer[], name = 'ground'): Mes
   const mesh = asGround(new Mesh(geo, material), GROUND_ORDER.city);
   mesh.name = name;
   return mesh;
+}
+
+/**
+ * The far ground (whole isthmus outside the detailed active area): a draped triangle soup (world/drape.ts)
+ * with one colour per vertex from `colorAt`, as a single draw call. Drawn over the flat land and under
+ * the city ground; it does not write depth (see GROUND_ORDER). Triangles must be CCW in the spec plane.
+ */
+export function farGroundMesh(soup: TriSoup, surface: GroundSurface, colorAt: (x: number, y: number) => number, name = 'far-ground'): Mesh {
+  const n = soup.positions.length / 2;
+  const pos = new Float32Array(n * 3);
+  const nor = new Float32Array(n * 3);
+  const col = new Float32Array(n * 3);
+  const c = new Color();
+  for (let v = 0; v < n; v++) {
+    const px = soup.positions[v * 2] as number;
+    const py = soup.positions[v * 2 + 1] as number;
+    const s = specToScene({ x: px, y: py }, surface.heightAt(px, py));
+    pos[v * 3] = s.x;
+    pos[v * 3 + 1] = s.y;
+    pos[v * 3 + 2] = s.z;
+    const nm = surface.normalAt(px, py);
+    nor[v * 3] = nm.x;
+    nor[v * 3 + 1] = nm.z;
+    nor[v * 3 + 2] = -nm.y;
+    c.setHex(colorAt(px, py));
+    col[v * 3] = c.r;
+    col[v * 3 + 1] = c.g;
+    col[v * 3 + 2] = c.b;
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new Float32BufferAttribute(nor, 3));
+  geo.setAttribute('color', new Float32BufferAttribute(col, 3));
+  geo.setIndex(new Uint32BufferAttribute(Uint32Array.from(soup.indices), 1));
+  geo.computeBoundingSphere();
+  const mesh = asGround(new Mesh(geo, new MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 })), GROUND_ORDER.far);
+  mesh.name = name;
+  return mesh;
+}
+
+/** A flat or sloped surface: x, y (spec plane), h (height) per vertex, CCW triangles in the spec plane. */
+export interface HeightSoup {
+  positions: number[];
+  indices: number[];
+}
+
+/** Lifts a flat TriSoup to a constant height. */
+export function liftSoup(soup: TriSoup, h: number): HeightSoup {
+  const positions: number[] = [];
+  for (let i = 0; i < soup.positions.length; i += 2) positions.push(soup.positions[i] as number, soup.positions[i + 1] as number, h);
+  return { positions, indices: [...soup.indices] };
+}
+
+/**
+ * Water or concrete surface at explicit heights (rivers follow their bed, the lake and chambers are flat). Drawn over the
+ * far ground and under the city ground (GROUND_ORDER), without writing depth, like every other ground layer.
+ */
+export function surfaceMesh(soup: HeightSoup, color: number, kind: 'water' | 'apron', name: string): Mesh {
+  const n = soup.positions.length / 3;
+  const pos = new Float32Array(n * 3);
+  const nor = new Float32Array(n * 3);
+  for (let v = 0; v < n; v++) {
+    const s = specToScene({ x: soup.positions[v * 3] as number, y: soup.positions[v * 3 + 1] as number }, soup.positions[v * 3 + 2] as number);
+    pos[v * 3] = s.x;
+    pos[v * 3 + 1] = s.y;
+    pos[v * 3 + 2] = s.z;
+    nor[v * 3 + 1] = 1;
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new Float32BufferAttribute(nor, 3));
+  geo.setIndex(new Uint32BufferAttribute(Uint32Array.from(soup.indices), 1));
+  geo.computeBoundingSphere();
+  const mesh = asGround(new Mesh(geo, new MeshStandardMaterial({ color, roughness: kind === 'water' ? 0.35 : 1, metalness: 0 })), GROUND_ORDER[kind]);
+  mesh.name = name;
+  return mesh;
+}
+
+/** Concrete lock walls (grey blockout boxes) along both sides of a chamber; they stand on the ground and write depth. */
+export function lockWallsMesh(chambers: readonly { center: Vec2; angle: number; length: number; width: number; floor: number }[], top: number, name = 'lock-walls'): Group {
+  const group = new Group();
+  group.name = name;
+  const wall = 5;
+  for (const c of chambers) {
+    const h = top + 0.3 - c.floor;
+    const holder = new Object3D();
+    const p = specToScene(c.center, c.floor + h / 2);
+    holder.position.set(p.x, p.y, p.z);
+    holder.rotation.y = specAngleToSceneYaw(c.angle);
+    for (const side of [-1, 1]) {
+      const box = new Mesh(new BoxGeometry(c.length, h, wall), mat(PALETTE.lockWall));
+      box.position.z = side * (c.width / 2 + wall / 2);
+      holder.add(box);
+    }
+    group.add(holder);
+  }
+  return group;
 }
 
 /** Earcut triangulation (three's ShapeUtils) of polygons with holes, as one CCW triangle soup. */
@@ -212,9 +339,9 @@ export function ribbonSoup(positions: readonly Vec2[], indices: readonly number[
 /**
  * One InstancedMesh for every building. Unit box with its pivot at the bottom.
  * `baseColor` picks each building's tone (default PALETTE.building); a deterministic ±25% shade
- * derived from its height is applied on top.
+ * derived from its height is applied on top. `baseY` gives each building's base height (default 0).
  */
-export function buildingsMesh<B extends Building>(buildings: B[], baseColor?: (b: B) => number): InstancedMesh {
+export function buildingsMesh<B extends Building>(buildings: B[], baseColor?: (b: B) => number, baseY?: (b: B) => number): InstancedMesh {
   const geo = new BoxGeometry(1, 1, 1);
   geo.translate(0, 0.5, 0);
   const mesh = new InstancedMesh(geo, mat(0xffffff), buildings.length);
@@ -228,7 +355,7 @@ export function buildingsMesh<B extends Building>(buildings: B[], baseColor?: (b
   buildings.forEach((b, i) => {
     if (baseColor) base.setHex(baseColor(b));
     const c = specToScene(b.center);
-    pos.set(c.x, 0, c.z);
+    pos.set(c.x, baseY ? baseY(b) : 0, c.z);
     q.setFromAxisAngle(up, specAngleToSceneYaw(b.angle));
     scl.set(b.width, b.height, b.depth);
     m.compose(pos, q, scl);
@@ -243,8 +370,11 @@ export function buildingsMesh<B extends Building>(buildings: B[], baseColor?: (b
   return mesh;
 }
 
-/** Ground ring plus a thin pole (bottom at y = 0, top at MARKER_HEIGHT). Same color for both. */
-export function landmarkMarker(kind: string): Group {
+/**
+ * Ground ring plus a thin pole (bottom at y = 0, top at MARKER_HEIGHT). Same color for both.
+ * `normal` (scene axes) tilts the ring to lie on sloped ground; the pole stays vertical.
+ */
+export function landmarkMarker(kind: string, normal?: { x: number; y: number; z: number }): Group {
   const color = markerColor(kind);
   const group = new Group();
 
@@ -254,6 +384,7 @@ export function landmarkMarker(kind: string): Group {
   ringGeo.rotateX(-Math.PI / 2);
   const ring = new Mesh(ringGeo, ringMat);
   ring.position.y = 0.12; // above the ground layers (world-view LAYER_Y)
+  if (normal) ring.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(normal.x, normal.y, normal.z));
   group.add(ring);
 
   const poleGeo = new CylinderGeometry(0.12, 0.12, MARKER_HEIGHT, 8);
