@@ -203,7 +203,7 @@ reads this map (#12), the authored layers above stay in use and the two coexist.
 | `airport` | search `hint` and `radius`, runway size and spacing, apron, the side the terminal faces (`towards`) |
 | `roads` | grade costs per kind, bridge / causeway / canal-bridge / reuse multipliers, named `stops` and the `routes` that join them |
 | `suitability` | where towns may build: slope, height band, coast preference, river crossing |
-| `towns` | growth tuning and `items`: each town has `seeds` **or** `seed_along: { route, from }` (seeded along that road from its stop towards the route's end, growing only near that stretch), and a `target_km2` |
+| `towns` | growth tuning and `items`: each town has `seeds` **or** `seed_along: { route, from, reach? }` (seeded along that road from its stop towards the route's end, discounted near that stretch, and built only within `reach` m of it when set), and a `target_km2`; optional `road_affinity` and `patches` (unbuilt gaps from a noise field). `separation` keeps unbuilt ground between different towns, `airport_buffer` keeps towns off the airfield's surroundings |
 | `cover` | beach, mangrove, clearings and high forest thresholds |
 | `transit` | named `stops` and the metro / rail `lines`; each branch is a list of stop ids |
 

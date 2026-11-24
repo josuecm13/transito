@@ -611,14 +611,16 @@ procedural:
   # Tocumen-style airfield: searched near the east end of the corridor. Compressed like the city
   # (~1:2.5 of Tocumen's 3,056 m): two close parallel runways, a slim field.
   airport:
-    hint: [5250, 2000]
+    # Detached from the corridor, in forest above the plain (#13). Further north (the vision's ~3300 m)
+    # the cordillera-south spur makes the field 69 m of earthworks and strands El Corredor in hills.
+    hint: [5350, 2800]
     radius: 900                 # m, search radius around the hint
     runway_length: 1200         # m
     runway_spacing: 260         # m between the two parallel runways
     runway_width: 40            # m
     margin: 50                  # m around the runways that must also be dry and flat
-    distance_weight: 0.03       # penalty per metre from the hint, in metres of height spread
-    heading_range: [0, 50]      # degrees clockwise from north
+    distance_weight: 0.05       # penalty per metre from the hint, in metres of height spread
+    heading_range: [10, 30]     # degrees clockwise from north
     apron: { length: 520, depth: 110, building: [300, 45] }   # m
     edge_margin: 200            # m inside the map frame
     towards: [2900, 1300]       # the terminal sits on this side (the city)
@@ -642,8 +644,9 @@ procedural:
       pacifica: [3850, 800]
       balboa: [900, 1250]
       gamboa: [1450, 3600]
+      corridor-east: [4700, 1500]   # keeps the Interamericana on the eastern plain before it climbs to the airport
     routes:
-      - { id: interamericana, kind: highway, stops: [balboa, city, airport-terminal] }
+      - { id: interamericana, kind: highway, stops: [balboa, city, corridor-east, airport-terminal] }
       - { id: transistmica, kind: highway, stops: [city-north, colon] }
       - { id: gamboa-road, kind: road, stops: [city, gamboa] }
       - { id: coastal-avenue, kind: road, stops: [old-quarter, city, pacifica] }
@@ -663,13 +666,18 @@ procedural:
     min_suitability: 0.12
     seed_snap: 450              # m, seeds move to the most suitable cell within this radius
     seed: 13
+    separation: 200             # m of unbuilt ground kept between cells of different towns (0 = off)
+    airport_buffer: 350         # m around the airfield where no town builds (0 = off)
     items:
-      - { id: la-ciudad, seeds: [[2450, 450], [2950, 1250]], target_km2: 3.3 }
-      - { id: colon, seeds: [[1900, 7250]], target_km2: 1.1 }
-      - { id: balboa, seeds: [[850, 1150]], target_km2: 0.7 }
+      - { id: la-ciudad, seeds: [[2450, 450], [2950, 1250]], target_km2: 1.8 }
+      - { id: colon, seeds: [[1900, 7250]], target_km2: 0.6 }
+      - { id: balboa, seeds: [[850, 1150]], target_km2: 0.45 }
       # Seeded along the route from the stop towards its end (the airport), and grows only near
-      # that stretch: a ribbon instead of a second city.
-      - { id: el-corredor, seed_along: { route: interamericana, from: city }, target_km2: 1.3, road_affinity: 3 }
+      # that stretch: a ribbon instead of a second city. Optional `patches: { wavelength, threshold }`
+      # leaves unbuilt gaps where a noise field (0..1) is below `threshold`: growth passes through
+      # them but does not build or count them. Optional `seed_along.reach` (m): the town builds only
+      # within this distance of its stretch of road.
+      - { id: el-corredor, seed_along: { route: interamericana, from: city, reach: 400 }, target_km2: 0.6, road_affinity: 3, patches: { wavelength: 260, threshold: 0.3 } }
       - { id: gamboa, seeds: [[1420, 3050]], target_km2: 0.1 }
   cover:
     seed: 19
@@ -690,10 +698,11 @@ procedural:
       balboa: [850, 1150]
       bay-east: [3800, 950]
       colon: [1900, 7100]
+      corridor-east: [4700, 1500]   # Línea 2 follows El Corredor (the Act 1 strip) instead of cutting through the hills
     lines:
       - { id: linea-1, name: "Línea 1", mode: metro, color: [214, 40, 40], branches: [[old-quarter-tip, casco, north]], station_spacing: 500 }
       # Two branches without a shared stop: one line or two is an open director decision (#12).
-      - { id: linea-2, name: "Línea 2", mode: metro, color: [52, 178, 74], branches: [[balboa, casco, bay-east], [north, airport-terminal]], station_spacing: 650 }
+      - { id: linea-2, name: "Línea 2", mode: metro, color: [52, 178, 74], branches: [[balboa, casco, bay-east], [north, corridor-east, airport-terminal]], station_spacing: 650 }
       - { id: linea-3, name: "Línea 3", mode: metro, color: [236, 196, 40], branches: [[casco, west-junction, north], [west-junction, west-north]], station_spacing: 500 }
       - { id: ferrocarril, name: "Ferrocarril Interoceánico", mode: rail, color: [150, 96, 196], branches: [[north, colon]], station_spacing: 1000 }
     off_urban: 2.5              # metro cost multiplier off built-up ground

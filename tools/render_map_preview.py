@@ -850,7 +850,7 @@ PROC_SCHEMA = {
     },
     "suitability": {"max_slope": "pos", "height_band": "span", "coast_fade": "frac", "coast_range": "pos", "crossing": "frac"},
     "towns": {"road_discount": "pos", "jitter": "nonneg", "jitter_wavelength": "pos", "min_suitability": "frac",
-              "seed_snap": "nonneg", "seed": "num", "items": "list"},
+              "seed_snap": "nonneg", "seed": "num", "separation": "nonneg", "airport_buffer": "nonneg", "items": "list"},
     "cover": {
         "seed": "num", "beach_width": "nonneg",
         "mangrove": {"max_height": "pos", "river_area_km2": "pos", "reach": "nonneg"},
@@ -863,7 +863,8 @@ PROC_SCHEMA = {
 ZONE = {"line": {"id": "str", "kind": "str", "points": "pts2", "width": "pos", "rate": "nonneg"},
         "disc": {"id": "str", "kind": "str", "at": "pt", "radius": "pos", "rate": "nonneg"}}
 ROUTE = {"id": "str", "kind": "str", "stops": "refs"}
-TOWN = {"id": "str", "target_km2": "pos", "?seeds": "pts1", "?seed_along": {"route": "str", "from": "str"}, "?road_affinity": "pos"}
+TOWN = {"id": "str", "target_km2": "pos", "?seeds": "pts1", "?seed_along": {"route": "str", "from": "str", "?reach": "pos"}, "?road_affinity": "pos",
+        "?patches": {"wavelength": "pos", "threshold": "frac"}}
 LINE = {"id": "str", "name": "str", "mode": "str", "color": "color", "branches": "branches", "station_spacing": "pos"}
 
 

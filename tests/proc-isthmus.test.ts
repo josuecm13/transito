@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { before, test } from 'node:test';
+import { distanceToPolyline, pointInPolygon } from '../src/world/geometry.ts';
 import { parseWorldSpec } from '../src/world/spec.ts';
 import { cellAt, field, mask } from '../src/world/proc/grid.ts';
 import { accumulate, routeFlow } from '../src/world/proc/hydrology.ts';
@@ -134,10 +135,55 @@ test('towns: built cells are dry land, each town within its target, El Corredor 
     assert.equal(iso.lake.lake.data[i], 0, 'town not in the lake');
     assert.equal(iso.canal.channel.data[i], 0, 'town not in the canal');
   }
-  const targets = [3.3, 1.1, 0.7, 1.3, 0.1];
+  const targets = spec.procedural.towns.items.map((t) => t.targetKm2);
   areasKm2.forEach((a, k) => assert.ok(a <= targets[k]! + 1e-9, `town ${k} ${a} ≤ ${targets[k]}`));
-  assert.ok(areasKm2[3]! >= 1.0, `El Corredor grew (${areasKm2[3]} km²)`);
-  assert.ok(areasKm2[0]! >= 2.0, `La Ciudad grew (${areasKm2[0]} km²)`);
+  assert.ok(areasKm2[3]! >= 0.8 * targets[3]!, `El Corredor grew (${areasKm2[3]} of ${targets[3]} km²)`);
+  assert.ok(areasKm2[0]! >= 0.8 * targets[0]!, `La Ciudad grew (${areasKm2[0]} of ${targets[0]} km²)`);
+});
+
+/** Centres of the cells each town owns, by town index. */
+const townCells = (): { x: number; y: number }[][] => {
+  const { owner } = iso.towns;
+  const { w, cell } = iso.towns.density;
+  const out: { x: number; y: number }[][] = spec.procedural.towns.items.map(() => []);
+  for (let i = 0; i < owner.length; i++) if (owner[i]) out[owner[i]! - 1]!.push({ x: ((i % w) + 0.5) * cell, y: (Math.floor(i / w) + 0.5) * cell });
+  return out;
+};
+
+test('towns (real map): different towns are more than `separation` apart', () => {
+  const sep = spec.procedural.towns.separation;
+  assert.ok(sep > 0, 'test setup: the spec turns separation on');
+  const cells = townCells();
+  for (let a = 0; a < cells.length; a++)
+    for (let b = a + 1; b < cells.length; b++) {
+      let best = Number.POSITIVE_INFINITY;
+      for (const p of cells[a]!) for (const q of cells[b]!) best = Math.min(best, Math.hypot(p.x - q.x, p.y - q.y));
+      assert.ok(best > sep, `towns ${a} and ${b} are ${best.toFixed(0)} m apart (separation ${sep} m)`);
+    }
+});
+
+test('towns (real map): nothing is built within `airport_buffer` of the airfield', () => {
+  const buffer = spec.procedural.towns.airportBuffer;
+  assert.ok(buffer > 0, 'test setup: the spec turns the airport buffer on');
+  const ring = [...iso.airport.field, iso.airport.field[0]!];
+  let nearest = Number.POSITIVE_INFINITY;
+  for (const town of townCells())
+    for (const p of town) nearest = Math.min(nearest, pointInPolygon(p, iso.airport.field) ? 0 : distanceToPolyline(p, ring));
+  // The buffer is measured on the grid (chamfer distance, within 8 %).
+  assert.ok(nearest > buffer * 0.92, `closest town cell ${nearest.toFixed(0)} m from the airfield (buffer ${buffer} m)`);
+});
+
+test('towns (real map): El Corredor builds only within `reach` of its highway', () => {
+  const item = spec.procedural.towns.items.find((t) => t.id === 'el-corredor')!;
+  const reach = item.seedAlong?.reach;
+  assert.ok(reach !== undefined, 'test setup: El Corredor has a reach');
+  const k = spec.procedural.towns.items.indexOf(item);
+  const { w, cell } = iso.towns.density;
+  const road = iso.roads.paths.find((r) => r.id === item.seedAlong!.route)!.cells.map((c) => ({ x: ((c % w) + 0.5) * cell, y: (Math.floor(c / w) + 0.5) * cell }));
+  let far = 0;
+  for (const p of townCells()[k]!) far = Math.max(far, Math.min(...road.map((q) => Math.hypot(p.x - q.x, p.y - q.y))));
+  // `reach` is measured on the grid (chamfer distance, within 8 %).
+  assert.ok(far <= reach * 1.08 + cell, `farthest El Corredor cell ${far.toFixed(0)} m from its highway (reach ${reach} m)`);
 });
 
 test('towns: reported area is the final built cells (river cells crossed by growth are not counted)', () => {
@@ -164,6 +210,48 @@ test('towns: reported area is the final built cells (river cells crossed by grow
   assert.ok(east > 0, 'test setup: growth crossed the river');
   assert.ok(built < 600, 'test setup: some of the 600-cell budget went to river cells');
   assert.equal(t.areasKm2[0], (built * 100) / 1e6);
+});
+
+test('towns: separation keeps unbuilt ground between different towns', () => {
+  // Flat 60 x 20 plain, two towns seeded 200 m apart, each with more budget than fits between them.
+  const g = { w: 60, h: 20, cell: 10 };
+  const suit = field(g, 1);
+  const towns = [
+    { id: 'a', seeds: [{ x: 205, y: 105 }], targetKm2: 0.05 },
+    { id: 'b', seeds: [{ x: 405, y: 105 }], targetKm2: 0.05 },
+  ];
+  const base = { roadDiscount: 0.5, jitter: 0, jitterWavelength: 50, minSuitability: 0.1, seedSnap: 0, seed: 1 };
+  const minGap = (owner: Uint8Array): number => {
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < owner.length; i++)
+      for (let j = 0; j < owner.length; j++)
+        if (owner[i] && owner[j] && owner[i] !== owner[j]) best = Math.min(best, Math.hypot((i % g.w) - (j % g.w), Math.floor(i / g.w) - Math.floor(j / g.w)) * g.cell);
+    return best;
+  };
+  const touching = growTowns(suit, [mask(g), mask(g)], { ...base, towns }).owner;
+  assert.ok(minGap(touching) <= 15, `test setup: without separation the towns meet (${minGap(touching)} m)`);
+  const t = growTowns(suit, [mask(g), mask(g)], { ...base, towns, separation: 60 });
+  assert.ok(minGap(t.owner) > 60, `towns ${minGap(t.owner)} m apart, separation 60 m`);
+  assert.ok(t.areasKm2[0]! > 0.02 && t.areasKm2[1]! > 0.02, `both towns still grew (${t.areasKm2.join(', ')} km²)`);
+});
+
+test('towns: patches leave unbuilt gaps that growth crosses but does not count', () => {
+  const g = { w: 80, h: 80, cell: 10 };
+  const suit = field(g, 1);
+  const patches = { wavelength: 150, threshold: 0.45 };
+  const base = { roadDiscount: 0.5, jitter: 0, jitterWavelength: 50, minSuitability: 0.1, seedSnap: 0, seed: 1 };
+  const t = growTowns(suit, [mask(g)], { ...base, towns: [{ id: 'p', seeds: [{ x: 405, y: 405 }], targetKm2: 0.2, patches }] });
+  const plain = growTowns(suit, [mask(g)], { ...base, towns: [{ id: 'p', seeds: [{ x: 405, y: 405 }], targetKm2: 0.2 }] });
+  // A cell is a gap if the plain town built it and the patchy one, with budget to spare, did not.
+  let built = 0;
+  let gapsInside = 0;
+  for (let i = 0; i < g.w * g.h; i++) {
+    if (t.owner[i]) built++;
+    else if (plain.owner[i]) gapsInside++;
+  }
+  assert.ok(gapsInside > 0, 'patchy town leaves gaps inside the plain footprint');
+  assert.equal(t.areasKm2[0], (built * 100) / 1e6, 'reported area is the built cells');
+  assert.ok(Math.abs(t.areasKm2[0]! - 0.2) < 0.001, `gaps do not use the budget: still reaches its target (${t.areasKm2[0]} km²)`);
 });
 
 test('transit: every station sits on a track of its line; lines that share a stop make an interchange', () => {

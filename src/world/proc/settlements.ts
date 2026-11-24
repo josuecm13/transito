@@ -6,6 +6,10 @@
  * random metric): step cost = jitter / suitability, much cheaper along main roads. Each town stops at
  * its target area. Edges come out ragged (jitter), towns fill valleys and plains (suitability) and
  * stretch along highways (road discount) — the ribbon of El Corredor is the same rule as the cities.
+ *
+ * Composition (#13): `separation` keeps unbuilt ground between different towns (a cell is built only
+ * if no other town has built within that distance), and a town's `patches` leave unbuilt gaps where a
+ * noise field is below a threshold (growth passes through them but does not build or count them).
  */
 import type { Vec2 } from '../vec.ts';
 import { cellAt, DIST8, DX8, DY8, field, MinHeap, type FieldGrid, type MaskGrid } from './grid.ts';
@@ -55,6 +59,10 @@ export interface TownSpec {
   readonly targetKm2: number;
   /** Multiplier on the road discount for this town (1 = default; higher = more ribbon-like). */
   readonly roadAffinity?: number;
+  /** Unbuilt gaps where 0.5 + 0.5 · fbm(wavelength) < threshold; growth crosses them without building. */
+  readonly patches?: { readonly wavelength: number; readonly threshold: number };
+  /** Cells this town may build and grow through; absent = everywhere. */
+  readonly allowed?: MaskGrid;
 }
 
 export interface GrowthParams {
@@ -69,6 +77,8 @@ export interface GrowthParams {
   /** Seeds move to the most suitable cell within this radius (m). */
   readonly seedSnap: number;
   readonly seed: number;
+  /** Unbuilt distance kept between cells of different towns (m); 0 or absent = off. */
+  readonly separation?: number;
 }
 
 export interface GrowthResult {
@@ -94,7 +104,8 @@ export function growTowns(suit: FieldGrid, nearRoad: readonly MaskGrid[], p: Gro
   const counts = p.towns.map(() => 0);
   const targets = p.towns.map((t) => (t.targetKm2 * 1e6) / (cell * cell));
   const heap = new MinHeap(4096);
-  const snap = (s: Vec2): number => {
+  // Seeds snap within the town's allowed cells (when it has them).
+  const snap = (s: Vec2, allowed?: MaskGrid): number => {
     const c = cellAt(suit, s.x, s.y);
     const r = Math.ceil(p.seedSnap / cell);
     const cx = c % w;
@@ -106,13 +117,14 @@ export function growTowns(suit: FieldGrid, nearRoad: readonly MaskGrid[], p: Gro
         const y = cy + dy;
         if (x < 0 || y < 0 || x >= w || y >= h || dx * dx + dy * dy > r * r) continue;
         const j = y * w + x;
-        if (suit.data[j]! > suit.data[best]! + 1e-9) best = j;
+        if (allowed && !allowed.data[j]) continue;
+        if (suit.data[j]! > suit.data[best]! + 1e-9 || (allowed && !allowed.data[best])) best = j;
       }
     return best;
   };
   p.towns.forEach((t, k) => {
     for (const s of t.seeds) {
-      const i = snap(s);
+      const i = snap(s, t.allowed);
       dist[k * n + i] = 0;
       heap.push(k * n + i, 0);
     }
@@ -120,6 +132,8 @@ export function growTowns(suit: FieldGrid, nearRoad: readonly MaskGrid[], p: Gro
   const stepCost = (i: number, k: number): number => {
     const s = suit.data[i]!;
     if (s < p.minSuitability) return Number.POSITIVE_INFINITY;
+    const allowed = p.towns[k]!.allowed;
+    if (allowed && !allowed.data[i]) return Number.POSITIVE_INFINITY;
     const x = (i % w) * cell;
     const y = Math.floor(i / w) * cell;
     const noise = 0.6 * fbm(x, y, { wavelength: p.jitterWavelength, octaves: 3 }, p.seed) + 0.8 * (hash01(i, p.seed + 1) - 0.5);
@@ -127,15 +141,50 @@ export function growTowns(suit: FieldGrid, nearRoad: readonly MaskGrid[], p: Gro
     if (nearRoad[k]!.data[i]) c *= Math.pow(p.roadDiscount, p.towns[k]!.roadAffinity ?? 1);
     return c;
   };
+  const inGap = (i: number, k: number): boolean => {
+    const g = p.towns[k]!.patches;
+    if (!g) return false;
+    const x = (i % w) * cell;
+    const y = Math.floor(i / w) * cell;
+    return 0.5 + 0.5 * fbm(x, y, { wavelength: g.wavelength, octaves: 3 }, p.seed + 7 + k) < g.threshold;
+  };
+  // Separation: `near[i]` = 0 if no town has built within `separation` of cell i, k + 1 if only town k
+  // has, SEVERAL if more than one. Town k may build cell i only when near[i] is 0 or k + 1.
+  const sepR = (p.separation ?? 0) / cell;
+  const SEVERAL = 255;
+  const near = sepR > 0 ? new Uint8Array(n) : undefined;
+  const disc: number[] = [];
+  if (near) {
+    const r = Math.floor(sepR);
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= sepR * sepR) disc.push(dx, dy);
+  }
+  const markNear = (c: number, k: number): void => {
+    const cx = c % w;
+    const cy = (c - cx) / w;
+    for (let q = 0; q < disc.length; q += 2) {
+      const x = cx + disc[q]!;
+      const y = cy + disc[q + 1]!;
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      const j = y * w + x;
+      const v = near![j]!;
+      if (v === 0) near![j] = k + 1;
+      else if (v !== k + 1) near![j] = SEVERAL;
+    }
+  };
   while (heap.size > 0) {
     const d0 = heap.topKey();
     const item = heap.pop();
     const k = Math.floor(item / n);
     const c = item - k * n;
     if (d0 > dist[item]! || owner[c] || counts[k]! >= targets[k]!) continue;
-    owner[c] = k + 1;
-    order[c] = counts[k]! / targets[k]!;
-    counts[k] = counts[k]! + 1;
+    if (near && near[c] !== 0 && near[c] !== k + 1) continue;
+    if (p.towns[k]!.allowed && !p.towns[k]!.allowed!.data[c]) continue;
+    if (!inGap(c, k)) {
+      owner[c] = k + 1;
+      order[c] = counts[k]! / targets[k]!;
+      counts[k] = counts[k]! + 1;
+      if (near) markNear(c, k);
+    }
     const cx = c % w;
     const cy = (c - cx) / w;
     for (let q = 0; q < 8; q++) {

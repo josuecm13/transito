@@ -13,7 +13,7 @@ import { AIRPORT_TERMINAL_STOP, type WorldSpec } from '../spec.ts';
 import type { Vec2 } from '../vec.ts';
 import { levelAirport, siteAirport, type AirportResult } from './airport.ts';
 import { classifyCover } from './cover.ts';
-import { cellAt, makeShape, mask, type FieldGrid, type MaskGrid } from './grid.ts';
+import { cellAt, distanceFrom, makeShape, mask, type FieldGrid, type MaskGrid } from './grid.ts';
 import { slopeField } from './hydrology.ts';
 import { floodReservoir, type LakeResult } from './lake.ts';
 import { generateRelief, type ReliefResult } from './relief.ts';
@@ -166,13 +166,21 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
       const y = (gy + 0.5) * cell - airport.centre.y;
       if (insideRing({ x: x + airport.centre.x, y: y + airport.centre.y }, airport.field)) unbuildable.data[gy * shape.w + gx] = 1;
     }
+  // Nor is its surroundings: towns stay `airport_buffer` m away (#13: a detached airfield).
+  if (P.towns.airportBuffer > 0) {
+    const fieldMask = mask(shape);
+    for (let gy = 0; gy < shape.h; gy++)
+      for (let gx = 0; gx < shape.w; gx++) if (insideRing({ x: (gx + 0.5) * cell, y: (gy + 0.5) * cell }, airport.field)) fieldMask.data[gy * shape.w + gx] = 1;
+    const d = distanceFrom(fieldMask);
+    for (let i = 0; i < d.data.length; i++) if (d.data[i]! <= P.towns.airportBuffer) unbuildable.data[i] = 1;
+  }
   const suit = suitability(height, slope, relief.land, unbuildable, riverMask, relief.distToSea, P.suitability);
   const highways = mask(shape);
   for (const r of roads.paths) if (r.kind !== 'rail') for (const c of r.cells) highways.data[c] = 1;
   const allRoads = nearRoads(highways, 90);
   // A town with `seedAlong` (El Corredor) is seeded along its route, from the `from` stop towards the
   // route's end (the airport), and grows only near that stretch.
-  const seedAlong = (route: string, from: Vec2): { seeds: Vec2[]; near: MaskGrid } => {
+  const seedAlong = (route: string, from: Vec2, reach?: number): { seeds: Vec2[]; near: MaskGrid; allowed?: MaskGrid } => {
     const path = roads.paths.find((r) => r.id === route)!;
     // Nearest path cell to the stop (stops are snapped to dry land, so match by distance).
     let startK = 0;
@@ -193,16 +201,28 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
     });
     const stretch = mask(shape);
     for (const c of path.cells.slice(nearFrom)) stretch.data[c] = 1;
-    return { seeds, near: nearRoads(stretch, 90) };
+    if (reach === undefined) return { seeds, near: nearRoads(stretch, 90) };
+    // `reach`: the ribbon builds only this close to its stretch (seeds too: they sit on the road).
+    const d = distanceFrom(stretch);
+    const allowed = mask(shape);
+    for (let i = 0; i < d.data.length; i++) allowed.data[i] = d.data[i]! <= reach ? 1 : 0;
+    return { seeds, near: nearRoads(stretch, 90), allowed };
   };
   const townSpecs: TownSpec[] = [];
   const townNear: MaskGrid[] = [];
   for (const t of P.towns.items) {
-    const along = t.seedAlong ? seedAlong(t.seedAlong.route, roadStop(t.seedAlong.from)) : undefined;
-    townSpecs.push({ id: t.id, seeds: along ? along.seeds : t.seeds, targetKm2: t.targetKm2, ...(t.roadAffinity !== undefined ? { roadAffinity: t.roadAffinity } : {}) });
+    const along = t.seedAlong ? seedAlong(t.seedAlong.route, roadStop(t.seedAlong.from), t.seedAlong.reach) : undefined;
+    townSpecs.push({
+      id: t.id,
+      seeds: along ? along.seeds : t.seeds,
+      targetKm2: t.targetKm2,
+      ...(t.roadAffinity !== undefined ? { roadAffinity: t.roadAffinity } : {}),
+      ...(t.patches ? { patches: t.patches } : {}),
+      ...(along?.allowed ? { allowed: along.allowed } : {}),
+    });
     townNear.push(along ? along.near : allRoads);
   }
-  const { items: _items, ...growth } = P.towns;
+  const { items: _items, airportBuffer: _buffer, ...growth } = P.towns;
   const towns = growTowns(suit, townNear, { ...growth, towns: townSpecs }, riverMask);
   report.push(`towns: ${townSpecs.map((t, k) => `${t.id} ${towns.areasKm2[k]!.toFixed(2)}/${t.targetKm2}`).join(', ')} km²`);
 

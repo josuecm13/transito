@@ -214,9 +214,10 @@ test('procedural section parses with named stops, the corridor seeded along its 
   const spec = parseWorldSpec(yaml);
   const p = spec.procedural;
   assert.equal(p.cell, 20);
-  assert.deepEqual(p.roads.routes.find((r) => r.id === 'interamericana')?.stops, ['balboa', 'city', 'airport-terminal']);
-  assert.deepEqual(p.towns.items.find((t) => t.id === 'el-corredor')?.seedAlong, { route: 'interamericana', from: 'city' });
-  assert.deepEqual(p.transit.lines.find((l) => l.id === 'linea-2')?.branches, [['balboa', 'casco', 'bay-east'], ['north', 'airport-terminal']]);
+  assert.deepEqual(p.roads.routes.find((r) => r.id === 'interamericana')?.stops, ['balboa', 'city', 'corridor-east', 'airport-terminal']);
+  assert.deepEqual(p.towns.items.find((t) => t.id === 'el-corredor')?.seedAlong, { route: 'interamericana', from: 'city', reach: 400 });
+  // Two branches, no shared stop: one line or two is still the director's call (#12). `corridor-east` is a via point.
+  assert.deepEqual(p.transit.lines.find((l) => l.id === 'linea-2')?.branches, [['balboa', 'casco', 'bay-east'], ['north', 'corridor-east', 'airport-terminal']]);
   assert.equal(p.transit.lines.find((l) => l.id === 'ferrocarril')?.mode, 'rail');
 });
 
@@ -232,10 +233,11 @@ test('procedural section is strict: an unknown key is rejected at every level', 
     ['roads.grade.rail', /rail: \{ g0: 0\.03, /, 'rail: { bogus: 1, g0: 0.03, ', 'procedural.roads.grade.rail.bogus'],
     ['roads.routes', /\{ id: railroad, kind: rail, /, '{ id: railroad, kind: rail, bogus: 1, ', 'procedural.roads.routes[4].bogus'],
     ['towns.items', /\{ id: gamboa, seeds: /, '{ id: gamboa, bogus: 1, seeds: ', 'procedural.towns.items[4].bogus'],
-    ['towns.items.seed_along', /seed_along: \{ route: interamericana, from: city \}/, 'seed_along: { route: interamericana, from: city, bogus: 1 }', 'procedural.towns.items[3].seed_along.bogus'],
+    ['towns.items.seed_along', /seed_along: \{ route: interamericana, from: city, reach: 400 \}/, 'seed_along: { route: interamericana, from: city, reach: 400, bogus: 1 }', 'procedural.towns.items[3].seed_along.bogus'],
     ['cover.clearing', /clearing: \{ wavelength: 300, /, 'clearing: { bogus: 1, wavelength: 300, ', 'procedural.cover.clearing.bogus'],
     ['transit.lines', /\{ id: ferrocarril, /, '{ id: ferrocarril, bogus: 1, ', 'procedural.transit.lines[3].bogus'],
     ['transit.grade', /grade: \{ metro: 0\.06, /, 'grade: { bogus: 1, metro: 0.06, ', 'procedural.transit.grade.bogus'],
+    ['towns.items.patches', /\{ id: gamboa, seeds: /, '{ id: gamboa, patches: { wavelength: 200, threshold: 0.4, bogus: 1 }, seeds: ', 'procedural.towns.items[4].patches.bogus'],
   ];
   for (const [name, from, to, expected] of cases) {
     const broken = yaml.replace(from, to);
@@ -247,12 +249,13 @@ test('procedural section is strict: an unknown key is rejected at every level', 
 test('procedural section rejects broken references and values', () => {
   // A route or a line naming a stop that does not exist.
   expectProblem(yaml.replace('stops: [city-north, colon] }', 'stops: [city-north, nowhere] }'), (p) => p.startsWith('procedural.roads.routes[1].stops') && p.includes("'nowhere'"));
-  expectProblem(yaml.replace('[north, airport-terminal]', '[north, tocumen]'), (p) => p.startsWith('procedural.transit.lines[1].branches[1]') && p.includes("'tocumen'"));
+  expectProblem(yaml.replace('[north, corridor-east, airport-terminal]', '[north, corridor-east, tocumen]'), (p) => p.startsWith('procedural.transit.lines[1].branches[1]') && p.includes("'tocumen'"));
   // The reserved airport terminal id cannot be redefined as a stop.
   expectProblem(yaml.replace('      bay-east: [3800, 950]\n', '      bay-east: [3800, 950]\n      airport-terminal: [5000, 1800]\n'), (p) => p.startsWith('procedural.transit.stops.airport-terminal') && p.includes('reserved'));
   // A town needs exactly one of seeds / seed_along, and seed_along must start at a named stop of a road.
   expectProblem(yaml.replace('{ id: el-corredor, seed_along:', '{ id: el-corredor, seeds: [[4000, 1500]], seed_along:'), (p) => p.startsWith('procedural.towns.items[3]') && p.includes('exactly one'));
-  expectProblem(yaml.replace('from: city }', 'from: colon }'), (p) => p.startsWith('procedural.towns.items[3].seed_along.from'));
+  expectProblem(yaml.replace('from: city, reach: 400 }', 'from: colon, reach: 400 }'), (p) => p.startsWith('procedural.towns.items[3].seed_along.from'));
+  expectProblem(yaml.replace('from: city, reach: 400 }', 'from: city, reach: 0 }'), (p) => p.startsWith('procedural.towns.items[3].seed_along.reach'));
   expectProblem(yaml.replace('route: interamericana, from: city', 'route: railroad, from: balboa'), (p) => p.startsWith('procedural.towns.items[3].seed_along.route') && p.includes('railroad'));
   // Points outside the map, inverted ranges, bad colours, duplicate ids.
   expectProblem(yaml.replace('dam_hint: [650, 6250]', 'dam_hint: [650, 9250]'), (p) => p.startsWith('procedural.lake.dam_hint') && p.includes('outside the map'));
@@ -260,4 +263,8 @@ test('procedural section rejects broken references and values', () => {
   expectProblem(yaml.replace('color: [150, 96, 196]', 'color: [150, 96, 300]'), (p) => p.startsWith('procedural.transit.lines[3].color'));
   expectProblem(yaml.replace('{ id: gamboa, seeds:', '{ id: colon, seeds:'), (p) => p.startsWith('procedural.towns.items') && p.includes("duplicate id 'colon'"));
   expectProblem(yaml.replace('runway_spacing: 260 ', 'runway_spacing: 30 '), (p) => p.startsWith('procedural.airport.runway_spacing'));
+  // Composition: separation and airport buffer are non-negative; a patch threshold is a fraction.
+  expectProblem(yaml.replace(/separation: \d+ /, 'separation: -5 '), (p) => p.startsWith('procedural.towns.separation'));
+  expectProblem(yaml.replace(/airport_buffer: \d+ /, 'airport_buffer: -5 '), (p) => p.startsWith('procedural.towns.airport_buffer'));
+  expectProblem(yaml.replace('{ id: gamboa, seeds:', '{ id: gamboa, patches: { wavelength: 200, threshold: 1.5 }, seeds:'), (p) => p.startsWith('procedural.towns.items[4].patches.threshold'));
 });

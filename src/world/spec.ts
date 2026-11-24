@@ -239,9 +239,11 @@ export interface ProcTown {
   /** Explicit seeds; empty when the town is seeded along a route (`seedAlong`). */
   seeds: Vec2[];
   /** Seeded along `route`, from its stop `from` towards the route's end; grows only near that stretch. */
-  seedAlong?: { route: string; from: string };
+  seedAlong?: { route: string; from: string; reach?: number };
   targetKm2: number;
   roadAffinity?: number;
+  /** Unbuilt gaps from a noise field (see settlements.ts TownSpec.patches). */
+  patches?: { wavelength: number; threshold: number };
 }
 
 /** A metro or rail line; each branch is a list of ids of `procedural.transit.stops` (or the airport terminal). */
@@ -265,7 +267,8 @@ export interface ProceduralSpec {
   airport: AirportParams;
   roads: Omit<RoadParams, 'routes'> & { stops: Record<string, Vec2>; routes: ProcRoute[] };
   suitability: SuitabilityParams;
-  towns: Omit<GrowthParams, 'towns'> & { items: ProcTown[] };
+  /** `airportBuffer` (m): no town builds within this distance of the airfield. */
+  towns: Omit<GrowthParams, 'towns' | 'separation'> & { separation: number; airportBuffer: number; items: ProcTown[] };
   cover: CoverParams;
   transit: Omit<TransitParams, 'lines'> & { stops: Record<string, Vec2>; lines: ProcLine[] };
 }
@@ -2013,19 +2016,20 @@ function parseProcSuitability(P: ProcReader, raw: unknown, path: string): Suitab
 }
 
 function parseProcTowns(P: ProcReader, raw: unknown, path: string, routes: readonly ProcRoute[]): ProceduralSpec['towns'] {
-  const o = P.sec(raw, path, ['road_discount', 'jitter', 'jitter_wavelength', 'min_suitability', 'seed_snap', 'seed', 'items']) ?? {};
+  const o = P.sec(raw, path, ['road_discount', 'jitter', 'jitter_wavelength', 'min_suitability', 'seed_snap', 'seed', 'separation', 'airport_buffer', 'items']) ?? {};
   const items = listOf(P.r, o.items, `${path}.items`).flatMap((raw2, i): ProcTown[] => {
     const p = `${path}.items[${i}]`;
-    const t = P.sec(raw2, p, ['id', 'target_km2'], ['seeds', 'seed_along', 'road_affinity']);
+    const t = P.sec(raw2, p, ['id', 'target_km2'], ['seeds', 'seed_along', 'road_affinity', 'patches']);
     if (!t) return [];
     const town: ProcTown = { id: P.r.str(t, 'id', p), seeds: [], targetKm2: P.num(t, 'target_km2', p, 'pos') };
     if ((t.seeds === undefined) === (t.seed_along === undefined)) P.r.problems.push(`${p}: expected exactly one of seeds, seed_along`);
     if (t.seeds !== undefined) town.seeds = P.ats(t.seeds, `${p}.seeds`, 1);
     if (t.seed_along !== undefined) {
       const sp = `${p}.seed_along`;
-      const sa = P.sec(t.seed_along, sp, ['route', 'from']);
+      const sa = P.sec(t.seed_along, sp, ['route', 'from'], ['reach']);
       if (sa) {
-        const along = { route: P.r.str(sa, 'route', sp), from: P.r.str(sa, 'from', sp) };
+        const along: { route: string; from: string; reach?: number } = { route: P.r.str(sa, 'route', sp), from: P.r.str(sa, 'from', sp) };
+        if (sa.reach !== undefined) along.reach = P.num(sa, 'reach', sp, 'pos');
         const rt = routes.find((x) => x.id === along.route);
         if (!rt) P.r.problems.push(`${sp}.route: unknown route '${along.route}'`);
         else if (rt.kind === 'rail') P.r.problems.push(`${sp}.route: '${along.route}' is a railroad; towns grow along roads`);
@@ -2034,6 +2038,11 @@ function parseProcTowns(P: ProcReader, raw: unknown, path: string, routes: reado
       }
     }
     if (t.road_affinity !== undefined) town.roadAffinity = P.num(t, 'road_affinity', p, 'pos');
+    if (t.patches !== undefined) {
+      const gp = `${p}.patches`;
+      const g = P.sec(t.patches, gp, ['wavelength', 'threshold']);
+      if (g) town.patches = { wavelength: P.num(g, 'wavelength', gp, 'pos'), threshold: P.num(g, 'threshold', gp, 'frac') };
+    }
     return [town];
   });
   P.unique(items.map((t) => t.id), `${path}.items`);
@@ -2045,6 +2054,8 @@ function parseProcTowns(P: ProcReader, raw: unknown, path: string, routes: reado
     minSuitability: P.num(o, 'min_suitability', path, 'frac'),
     seedSnap: P.num(o, 'seed_snap', path, 'nonneg'),
     seed: P.num(o, 'seed', path),
+    separation: P.num(o, 'separation', path, 'nonneg'),
+    airportBuffer: P.num(o, 'airport_buffer', path, 'nonneg'),
     items,
   };
 }
