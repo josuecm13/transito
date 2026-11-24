@@ -105,13 +105,24 @@ test("Act 1 landmarks sit on El Corredor's dry ground, inside the barrio and the
     assert.ok(dry(at(id)), `${id} on dry land`);
     assert.equal(ownerAt(at(id)), town, `${id} on an El Corredor cell`);
   }
-  assert.ok(dist(at('tito-home'), iso.act1.anchor) <= iso.height.cell, 'the house is the barrio centre');
+  assert.ok(dist(at('tito-home'), iso.act1.anchor) <= 2 * iso.height.cell, 'the house is the barrio centre (stepped off the carriageway)');
   const s = iso.act1.strip;
   const toStrip = distanceToPolyline(at('corridor-market'), s.centreline as never);
   assert.ok(toStrip <= s.halfWidth, `shop ${toStrip.toFixed(0)} m off the strip`);
   const shop = dist(at('corridor-market'), at('tito-home'));
   assert.ok(shop >= 100 && shop <= 300, `shop ${shop.toFixed(0)} m from the house`);
   assert.ok(dist(at('miguelito-hills'), iso.act1.anchor) <= 600 + iso.height.cell);
+});
+
+test('tito-home is clear of every carriageway, by at least a sidewalk (#14)', () => {
+  const sidewalk = Math.max(...Object.values(spec.streetProfiles).map((p) => p.sidewalk));
+  const home = at('tito-home');
+  for (const r of iso.roads.paths) {
+    if (r.kind === 'rail') continue;
+    const half = spec.streetProfiles[r.kind]!.width / 2;
+    const d = distanceToPolyline(home, r.points as never);
+    assert.ok(d >= half + sidewalk, `${r.id}: home ${d.toFixed(1)} m from its centreline, needs ${(half + sidewalk).toFixed(1)}`);
+  }
 });
 
 test('miguelito-hills is the steepest El Corredor ground near the barrio', () => {

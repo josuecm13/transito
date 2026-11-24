@@ -253,7 +253,11 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
     `act1: ${A.line} → ${A.branchTo} at ${A.anchorAt}: anchor (${act1.anchor.x.toFixed(0)}, ${act1.anchor.y.toFixed(0)})${act1.anchorDry ? '' : ' NOT DRY'}, ` +
       `barrio ${A.barrioRadius} m ${(act1.townShare * 100).toFixed(0)}% ${A.town}, strip ${(act1.strip.lengthM / 1000).toFixed(2)} km × ${2 * A.stripHalfWidth} m`,
   );
-  const landmarks = placeLandmarks(P.landmarks, act1, airport, towns.owner, height, A.townIndex);
+  const sidewalkMax = Math.max(0, ...Object.values(spec.streetProfiles).map((sp) => sp.sidewalk));
+  const clearOf = roads.paths
+    .filter((r) => r.kind !== 'rail')
+    .map((r) => ({ points: r.points, clear: (spec.streetProfiles[r.kind]?.width ?? 0) / 2 + sidewalkMax }));
+  const landmarks = placeLandmarks(P.landmarks, act1, airport, towns.owner, height, A.townIndex, clearOf);
   report.push(`landmarks: ${landmarks.map((l) => `${l.id} (${l.at.x.toFixed(0)}, ${l.at.y.toFixed(0)})`).join(', ')}`);
   return { relief, height, lake, rivers, canal, airport, roads, towns, cover, transit, act1, landmarks, report };
 }

@@ -5,7 +5,7 @@
  * features when they move. Act 1 landmarks hang off the Act 1 placement (act1.ts); airport landmarks
  * off the generated airfield. Town-owned spots snap to the nearest built cell of the act's town.
  *
- *   anchor                  the act1 anchor (Tito's barrio centre)
+ *   anchor                  the act1 anchor (Tito's barrio centre), moved to the nearest town cell clear of every carriageway
  *   along: m                that far along the act1 strip from the anchor (towards the branch end)
  *   steepest_within: m      the steepest built cell of the act's town within that radius of the anchor
  *   airport: terminal       the generated terminal (landside)
@@ -17,6 +17,7 @@ import { splitAt } from './act1.ts';
 import type { AirportResult } from './airport.ts';
 import type { FieldGrid } from './grid.ts';
 import { cellAt } from './grid.ts';
+import { distanceToPolyline } from '../geometry.ts';
 
 export type LandmarkRule =
   | { readonly kind: 'anchor' }
@@ -62,6 +63,43 @@ export function snapToTown(p: Vec2, owner: Uint8Array, g: FieldGrid, town: numbe
   return best < 0 ? p : centreOf(g, best);
 }
 
+/** A carriageway a landmark must stay off: its centreline and the clear distance from it (half width + margin). */
+export interface RoadClearance {
+  readonly points: readonly Vec2[];
+  readonly clear: number;
+}
+
+/** Nearest cell of `town` to p whose centre is `clear` of every road (rings of growing radius); null when none within maxR. */
+export function snapClearOfRoads(p: Vec2, owner: Uint8Array, g: FieldGrid, town: number, roads: readonly RoadClearance[], maxR = 600): Vec2 | null {
+  const ok = (q: Vec2): boolean => roads.every((r) => distanceToPolyline(q, r.points as never) >= r.clear);
+  const c0 = cellAt(g, p.x, p.y);
+  const cx = c0 % g.w;
+  const cy = Math.floor(c0 / g.w);
+  const R = Math.ceil(maxR / g.cell);
+  for (let r = 0; r <= R; r++) {
+    let best: Vec2 | null = null;
+    let bestD = Infinity;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const gx = cx + dx;
+        const gy = cy + dy;
+        if (gx < 0 || gy < 0 || gx >= g.w || gy >= g.h) continue;
+        const c = gy * g.w + gx;
+        if (owner[c] !== town + 1) continue;
+        const q = centreOf(g, c);
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (d < bestD && ok(q)) {
+          bestD = d;
+          best = q;
+        }
+      }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
 /** Slope (m/m) at cell c by central differences. */
 function slopeAt(h: FieldGrid, c: number): number {
   const x = c % h.w;
@@ -77,12 +115,14 @@ export function placeLandmarks(
   owner: Uint8Array,
   height: FieldGrid,
   town: number,
+  roads: readonly RoadClearance[] = [],
 ): PlacedLandmark[] {
   return rules.map(({ id, rule }) => {
     let at: Vec2;
     switch (rule.kind) {
       case 'anchor':
-        at = snapToTown(act1.anchor, owner, height, town);
+        // The barrio centre sits on the track, which runs along the highway: step off every carriageway.
+        at = (roads.length ? snapClearOfRoads(act1.anchor, owner, height, town, roads) : null) ?? snapToTown(act1.anchor, owner, height, town);
         break;
       case 'along': {
         const line = act1.strip.centreline;
