@@ -1,8 +1,8 @@
 import type { GamePlugin } from '../ecs/plugin.ts';
-import { WorldDataKey } from './keys.ts';
+import { CameraControlKey, WorldDataKey } from './keys.ts';
 import { sceneToSpec } from '../world/coords.ts';
 import { markerColor } from '../engine/meshes.ts';
-import { clampToCircle, headingToMinimapAngle, worldToMinimap } from '../sim/minimap.ts';
+import { clampToCircle, headingToMinimapAngle, minimapOrientation, worldToMinimap } from '../sim/minimap.ts';
 import { MINIMAP_COLORS, renderStaticLayer } from '../ui/minimap-layer.ts';
 
 /** UI tuning, not world data. `ranges` are view radii in meters (M toggles). */
@@ -13,9 +13,10 @@ const TITO_TEAL = '#14b8c4';
 
 export const minimap: GamePlugin = {
   name: 'minimap',
-  dependsOn: ['world-data', 'player'],
+  dependsOn: ['world-data', 'player', 'camera-settings'],
   setup(ctx) {
     const data = ctx.services.get(WorldDataKey);
+    const camera = ctx.services.get(CameraControlKey);
     const layer = renderStaticLayer(data, MINIMAP.metersPerPxLayer);
     const size = MINIMAP.sizePx;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -59,6 +60,12 @@ export const minimap: GamePlugin = {
 
         g.fillStyle = MINIMAP_COLORS.sea;
         g.fillRect(0, 0, size, size);
+        // Top-down: north up. Third-person: the camera's forward points up (yaw is 0 in top-down).
+        const o = minimapOrientation(camera.chase ? camera.yaw : 0, p.yaw ?? 0);
+        g.save();
+        g.translate(half, half);
+        g.rotate(o.mapAngle);
+        g.translate(-half, -half);
         const k = MINIMAP.metersPerPxLayer / mPerPx; // screen px per layer px
         const origin = layer.toLayer(at);
         g.imageSmoothingEnabled = true;
@@ -75,10 +82,11 @@ export const minimap: GamePlugin = {
           g.strokeStyle = m.clamped ? '#ffffff' : 'rgba(0,0,0,.6)';
           g.stroke();
         }
+        g.restore();
 
         g.save();
         g.translate(half, half);
-        g.rotate(headingToMinimapAngle(p.yaw ?? 0));
+        g.rotate(camera.chase ? o.arrowAngle : headingToMinimapAngle(p.yaw ?? 0));
         g.beginPath();
         g.moveTo(0, -9);
         g.lineTo(6, 7);
@@ -99,7 +107,9 @@ export const minimap: GamePlugin = {
         g.textBaseline = 'top';
         g.shadowColor = 'rgba(0,0,0,.8)';
         g.shadowBlur = 3;
-        g.fillText('N', half, 4);
+        // The "N" rides the rim at the bearing of north (top center when north is up).
+        const rim = half - 10;
+        g.fillText('N', half + Math.sin(o.northAngle) * rim, half - Math.cos(o.northAngle) * rim - 6);
         g.restore();
       },
     });

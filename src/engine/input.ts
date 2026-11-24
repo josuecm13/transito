@@ -2,7 +2,9 @@ export interface Input {
   isDown(code: string): boolean;
   /** x = right, y = forward (up-screen); diagonals normalized. */
   moveAxis(): { x: number; y: number };
-  /** Forget all held keys. */
+  /** Mouse movement (px) since the last call, only while the pointer is locked; resets to zero. */
+  takeMouseDelta(): { x: number; y: number };
+  /** Forget all held keys and any pending mouse movement. */
   clear(): void;
   dispose(): void;
 }
@@ -15,7 +17,19 @@ export function createInput(target: Window): Input {
   const onUp = (e: KeyboardEvent): void => {
     down.delete(e.code);
   };
-  const clear = (): void => down.clear();
+  let mx = 0;
+  let my = 0;
+  const onMove = (e: MouseEvent): void => {
+    if (!target.document.pointerLockElement) return;
+    mx += e.movementX;
+    my += e.movementY;
+  };
+  const clear = (): void => {
+    down.clear();
+    mx = 0;
+    my = 0;
+  };
+  target.addEventListener('mousemove', onMove);
   target.addEventListener('keydown', onDown);
   target.addEventListener('keyup', onUp);
   target.addEventListener('blur', clear);
@@ -24,6 +38,12 @@ export function createInput(target: Window): Input {
   return {
     isDown: (code) => down.has(code),
     clear,
+    takeMouseDelta() {
+      const d = { x: mx, y: my };
+      mx = 0;
+      my = 0;
+      return d;
+    },
     moveAxis() {
       const x = (any('KeyD', 'ArrowRight') ? 1 : 0) - (any('KeyA', 'ArrowLeft') ? 1 : 0);
       const y = (any('KeyW', 'ArrowUp') ? 1 : 0) - (any('KeyS', 'ArrowDown') ? 1 : 0);
@@ -33,6 +53,7 @@ export function createInput(target: Window): Input {
     dispose() {
       target.removeEventListener('keydown', onDown);
       target.removeEventListener('keyup', onUp);
+      target.removeEventListener('mousemove', onMove);
       target.removeEventListener('blur', clear);
       target.document.removeEventListener('visibilitychange', clear);
       clear();

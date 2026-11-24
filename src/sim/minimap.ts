@@ -31,3 +31,13 @@ export function clampToCircle(px: Vec2, sizePx: number, marginPx: number): Vec2 
 export function headingToMinimapAngle(yaw: number): number {
   return -yaw;
 }
+
+/**
+ * Minimap orientation for a camera yaw (same convention as cameraPose; 0 = north up). Canvas angles
+ * are clockwise-positive. `mapAngle` rotates the map about the center so the camera's forward points
+ * up; `arrowAngle` is the player arrow inside that rotated frame; `northAngle` is where the "N"
+ * sits on the rim, measured clockwise from the top.
+ */
+export function minimapOrientation(cameraYaw: number, playerYaw: number): { mapAngle: number; arrowAngle: number; northAngle: number } {
+  return { mapAngle: cameraYaw, arrowAngle: cameraYaw - playerYaw, northAngle: cameraYaw };
+}

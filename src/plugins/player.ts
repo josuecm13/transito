@@ -1,6 +1,6 @@
 import { BoxGeometry, CapsuleGeometry, Group, Mesh, MeshStandardMaterial } from 'three/webgpu';
 import type { GamePlugin } from '../ecs/plugin.ts';
-import { WorldDataKey } from './keys.ts';
+import { CameraControlKey, WorldDataKey } from './keys.ts';
 import { specToScene } from '../world/coords.ts';
 import { desiredVelocity, turnTowards, yawFacing } from '../sim/locomotion.ts';
 import { TITO_BODY, centerY } from '../sim/body.ts';
@@ -18,9 +18,10 @@ const CENTER_Y = centerY(TITO_BODY);
 
 export const player: GamePlugin = {
   name: 'player',
-  dependsOn: ['world-data', 'world-physics'],
+  dependsOn: ['world-data', 'world-physics', 'camera-settings'],
   setup(ctx) {
     const { slice, terrain } = ctx.services.get(WorldDataKey);
+    const camera = ctx.services.get(CameraControlKey);
     const { rapier: R, world } = ctx.physics;
 
     let start = slice.spawn;
@@ -78,7 +79,7 @@ export const player: GamePlugin = {
           return;
         }
         const running = c.input.isDown('ShiftLeft') || c.input.isDown('ShiftRight');
-        const v = desiredVelocity(c.input.moveAxis(), running, PLAYER);
+        const v = desiredVelocity(c.input.moveAxis(), running, PLAYER, camera.chase ? camera.yaw : 0);
         moveDir = v.x !== 0 || v.z !== 0 ? { x: v.x, z: v.z } : null;
         // No gravity while grounded: a downward component on the huge ground cuboid at 5 km
         // coordinates makes Rapier's character controller cancel the horizontal move (f32 precision).

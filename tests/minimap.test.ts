@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clampToCircle, headingToMinimapAngle, worldToMinimap } from '../src/sim/minimap.ts';
+import { clampToCircle, headingToMinimapAngle, minimapOrientation, worldToMinimap } from '../src/sim/minimap.ts';
 import { yawFacing } from '../src/sim/locomotion.ts';
 
 const near = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} vs ${b}`);
@@ -52,4 +52,20 @@ test('heading: facing north -> 0, east -> +PI/2 (clockwise), derived from yawFac
   near(headingToMinimapAngle(yawFacing(1, 0)), Math.PI / 2);
   near(headingToMinimapAngle(yawFacing(0, 1)), Math.PI);
   near(headingToMinimapAngle(yawFacing(-1, 0)), -Math.PI / 2);
+});
+
+test('minimap orientation: camera yaw 0 is north up exactly as before', () => {
+  const o = minimapOrientation(0, 0.7);
+  near(o.mapAngle, 0);
+  near(o.northAngle, 0);
+  near(o.arrowAngle, headingToMinimapAngle(0.7));
+});
+
+test('minimap orientation: facing west puts west up, so the map turns 90 deg clockwise and N sits at the right rim', () => {
+  const o = minimapOrientation(Math.PI / 2, Math.PI / 2);
+  near(o.mapAngle, Math.PI / 2);
+  near(o.northAngle, Math.PI / 2); // N clockwise 90 deg from the top = right side
+  near(o.arrowAngle, 0); // player faces the camera forward, arrow points up
+  // A player facing north while the camera looks west points right-ish on the rotated map.
+  near(minimapOrientation(Math.PI / 2, 0).arrowAngle, Math.PI / 2);
 });
