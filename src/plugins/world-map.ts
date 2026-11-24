@@ -4,15 +4,18 @@ import type { MapView, Viewport, ZoomLimits } from '../sim/map-view.ts';
 import { clampCenter, clampZoom, fitBounds, pan, zoomAt } from '../sim/map-view.ts';
 import type { DetailLayer } from '../ui/world-map-canvas.ts';
 import { createTitoPulse, drawWorldMap, WORLD_MAP_TITLE } from '../ui/world-map-canvas.ts';
+import { bakeIsthmusBase } from '../ui/map-base.ts';
 import { renderStaticLayer } from '../ui/minimap-layer.ts';
 import { sceneToSpec } from '../world/coords.ts';
 import type { Vec2 } from '../world/vec.ts';
-import { ScreensKey, WorldDataKey } from './keys.ts';
+import { LandCoverKey, ScreensKey, WorldDataKey } from './keys.ts';
 
 /** UI tuning, not world data. */
 const DETAIL_M_PER_PX = 1;
 const MIN_M_PER_PX = 0.5;
 const FIT_PADDING_PX = 60;
+/** Meters per pixel of the whole-isthmus base image (land cover + hillshade + water), baked once. */
+const BASE_M_PER_PX = 6;
 /** Keyboard pan speed in screen px/s, so world speed scales with zoom. */
 const PAN_PX_PER_S = 650;
 const KEY_ZOOM_STEP = 2;
@@ -34,7 +37,7 @@ const ZOOM_KEYS: Record<string, number> = {
 
 export const worldMap: GamePlugin = {
   name: 'world-map',
-  dependsOn: ['screens', 'world-data', 'player'],
+  dependsOn: ['screens', 'world-data', 'world-view', 'player'],
   setup(ctx) {
     const screens = ctx.services.get(ScreensKey);
     const data = ctx.services.get(WorldDataKey);
@@ -51,7 +54,14 @@ export const worldMap: GamePlugin = {
     };
 
     function open(root: HTMLElement): typeof session {
-      detail ??= { layer: renderStaticLayer(data, DETAIL_M_PER_PX), metersPerPx: DETAIL_M_PER_PX };
+      if (!detail) {
+        const cover = ctx.services.get(LandCoverKey);
+        const t0 = performance.now();
+        const base = bakeIsthmusBase(data, cover, bounds, BASE_M_PER_PX);
+        const t1 = performance.now();
+        detail = { layer: renderStaticLayer(data, DETAIL_M_PER_PX, cover), metersPerPx: DETAIL_M_PER_PX, base };
+        console.info(`world-map: base image ${base.frame.w}x${base.frame.h} baked in ${(t1 - t0).toFixed(0)} ms, detail layer in ${(performance.now() - t1).toFixed(0)} ms`);
+      }
       const layer = detail;
       // Every listener below uses this signal: one abort() removes them all.
       const listeners = new AbortController();

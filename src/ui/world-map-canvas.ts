@@ -6,6 +6,7 @@ import type { MapView, Viewport } from '../sim/map-view.ts';
 import { niceScaleLength, placeLabels, worldToScreen } from '../sim/map-view.ts';
 import { headingToMinimapAngle } from '../sim/minimap.ts';
 import { markerColor } from '../engine/meshes.ts';
+import type { BaseImage } from './map-base.ts';
 import type { StaticLayer } from './minimap-layer.ts';
 import { MINIMAP_COLORS } from './minimap-layer.ts';
 
@@ -61,6 +62,8 @@ export interface DetailLayer {
   layer: StaticLayer;
   /** Meters per layer pixel the layer was rendered at. */
   metersPerPx: number;
+  /** Whole-isthmus land cover / relief / water image (transparent sea), drawn over the plain land fill. */
+  base?: BaseImage;
 }
 
 export interface WorldMapFrame {
@@ -216,6 +219,14 @@ export function drawWorldMap(g: Ctx, frame: WorldMapFrame, data: WorldData, deta
   landPath();
   g.fillStyle = C.land;
   g.fill();
+  if (detail.base) {
+    const { canvas, frame } = detail.base;
+    const o = toS({ x: frame.minX, y: frame.maxY });
+    const kb = frame.metersPerPx / mpp;
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(canvas, o.x, o.y, canvas.width * kb, canvas.height * kb);
+  }
   const origin = toS({ x: 0, y: 0 });
   const pattern = hatchPattern(g);
   pattern?.setTransform(new DOMMatrix().translate(origin.x, origin.y));

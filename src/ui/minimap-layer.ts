@@ -6,6 +6,8 @@ import { AVENUE_KINDS } from '../world/streets/region.ts';
 import { STREET_LAYERS } from '../world/street-surface.ts';
 import type { StreetClass } from '../world/streets/planar-graph.ts';
 import { courtRect } from '../world/court-layout.ts';
+import type { Layer1Output } from '../world/layers/layer1-land-cover.ts';
+import { bakeCover, paintWater } from './map-base.ts';
 
 export const MINIMAP_COLORS = {
   sea: '#1d4e7a',
@@ -28,6 +30,8 @@ export const MINIMAP_COLORS = {
 export const LAYER_MARGIN_M = 100;
 /** Thinnest street stroke (layer px), so alleys stay visible at coarse scales. */
 const MIN_STREET_PX = 1;
+/** Meters per pixel of the land-cover ground baked under the streets (the cover grid itself is 16 m). */
+const COVER_BAKE_M_PER_PX = 3;
 
 export interface StaticLayer {
   canvas: HTMLCanvasElement;
@@ -40,7 +44,7 @@ export interface StaticLayer {
  * band under the carriageway, real widths), parks / courts, buildings. Used by the minimap and the
  * world map's detail layer.
  */
-export function renderStaticLayer(data: WorldData, metersPerPx: number): StaticLayer {
+export function renderStaticLayer(data: WorldData, metersPerPx: number, cover?: Layer1Output): StaticLayer {
   const { rect } = data.slice;
   const minX = rect.minX - LAYER_MARGIN_M;
   const maxY = rect.maxY + LAYER_MARGIN_M;
@@ -92,6 +96,15 @@ export function renderStaticLayer(data: WorldData, metersPerPx: number): StaticL
   g.fillStyle = MINIMAP_COLORS.sea;
   g.fillRect(0, 0, w, h);
   fillPolys([ring(data.spec.land)], MINIMAP_COLORS.land);
+  if (cover) {
+    // Land cover + relief as the ground (cheap: coarser than the streets), then layer 3 water, under blocks and streets.
+    const land = [data.spec.land, ...data.spec.islands.map((i) => i.points)];
+    const area = { minX, maxX: minX + w * metersPerPx, minY: maxY - h * metersPerPx, maxY };
+    const ground = bakeCover(area, Math.max(metersPerPx, COVER_BAKE_M_PER_PX), cover, land, data.terrain.farGrid);
+    g.imageSmoothingEnabled = true;
+    g.drawImage(ground.canvas, 0, 0, w, h);
+    paintWater(g, toLayer, metersPerPx, data.water);
+  }
 
   // Blocks by land use (court blocks green with the court on top).
   const { streets, city } = data;

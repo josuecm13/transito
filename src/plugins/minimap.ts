@@ -1,5 +1,5 @@
 import type { GamePlugin } from '../ecs/plugin.ts';
-import { CameraControlKey, WorldDataKey } from './keys.ts';
+import { CameraControlKey, LandCoverKey, WorldDataKey } from './keys.ts';
 import { sceneToSpec } from '../world/coords.ts';
 import { markerColor } from '../engine/meshes.ts';
 import { clampToCircle, headingToMinimapAngle, minimapOrientation, worldToMinimap } from '../sim/minimap.ts';
@@ -13,11 +13,11 @@ const TITO_TEAL = '#14b8c4';
 
 export const minimap: GamePlugin = {
   name: 'minimap',
-  dependsOn: ['world-data', 'player', 'camera-settings'],
+  dependsOn: ['world-data', 'world-view', 'player', 'camera-settings'],
   setup(ctx) {
     const data = ctx.services.get(WorldDataKey);
     const camera = ctx.services.get(CameraControlKey);
-    const layer = renderStaticLayer(data, MINIMAP.metersPerPxLayer);
+    const layer = renderStaticLayer(data, MINIMAP.metersPerPxLayer, ctx.services.get(LandCoverKey));
     const size = MINIMAP.sizePx;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
