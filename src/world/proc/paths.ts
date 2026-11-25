@@ -125,14 +125,63 @@ export function polylineLength(pts: readonly Vec2[]): number {
 }
 
 /**
+ * Walks the grid cells the segment a-b traverses (DDA; exact corner crossings also visit both
+ * diagonal neighbours). Stops and returns false as soon as `visit` returns false.
+ */
+function walkCells(g: GridShape, a: Vec2, b: Vec2, visit: (cell: number) => boolean): boolean {
+  const ax = a.x / g.cell;
+  const ay = a.y / g.cell;
+  const dx = b.x / g.cell - ax;
+  const dy = b.y / g.cell - ay;
+  let gx = Math.min(g.w - 1, Math.max(0, Math.floor(ax)));
+  let gy = Math.min(g.h - 1, Math.max(0, Math.floor(ay)));
+  const ex = Math.min(g.w - 1, Math.max(0, Math.floor(b.x / g.cell)));
+  const ey = Math.min(g.h - 1, Math.max(0, Math.floor(b.y / g.cell)));
+  const sx = dx > 0 ? 1 : -1;
+  const sy = dy > 0 ? 1 : -1;
+  const tdx = dx !== 0 ? Math.abs(1 / dx) : Number.POSITIVE_INFINITY;
+  const tdy = dy !== 0 ? Math.abs(1 / dy) : Number.POSITIVE_INFINITY;
+  let tx = dx === 0 ? Number.POSITIVE_INFINITY : ((dx > 0 ? gx + 1 - ax : ax - gx) * tdx);
+  let ty = dy === 0 ? Number.POSITIVE_INFINITY : ((dy > 0 ? gy + 1 - ay : ay - gy) * tdy);
+  for (let guard = g.w + g.h + 2; guard > 0; guard--) {
+    if (!visit(gy * g.w + gx)) return false;
+    if (gx === ex && gy === ey) return true;
+    // Exact corner crossings step both axes, so the diagonal neighbours are not skipped over.
+    if (tx < ty) {
+      gx += sx;
+      tx += tdx;
+    } else if (ty < tx) {
+      gy += sy;
+      ty += tdy;
+    } else {
+      if (!visit(gy * g.w + gx + sx) || !visit((gy + sy) * g.w + gx)) return false;
+      gx += sx;
+      gy += sy;
+      tx += tdx;
+      ty += tdy;
+    }
+    if (gx < 0 || gy < 0 || gx >= g.w || gy >= g.h) return true;
+  }
+  return true;
+}
+
+/**
  * Smooths a routed cell path (Douglas-Peucker + Chaikin), backing off to gentler settings when a
- * smoothed point would land on a blocked cell, so the drawn line never cuts across what the route
- * avoided. End points are kept exactly.
+ * smoothed vertex lands on a blocked cell or a smoothed segment crosses a blocked cell that the raw
+ * path does not itself cross, so smoothing never introduces a new crossing of what the route
+ * avoided (a clip already present in the raw path belongs to the router). End points are kept exactly.
  */
 export function smoothAvoiding(g: GridShape, cells: readonly number[], blocked: { readonly data: Uint8Array }, from?: Vec2, to?: Vec2): Vec2[] {
   const raw = cellsToPoints(g, cells);
   if (from) raw[0] = from;
   if (to) raw[raw.length - 1] = to;
+  const rawCrossed = new Set<number>();
+  for (let i = 1; i < raw.length; i++)
+    walkCells(g, raw[i - 1]!, raw[i]!, (c) => {
+      if (blocked.data[c]) rawCrossed.add(c);
+      return true;
+    });
+  const allowed = (c: number): boolean => !blocked.data[c] || rawCrossed.has(c);
   const tries: [number, number][] = [
     [0.8, 3],
     [0.4, 2],
@@ -140,7 +189,10 @@ export function smoothAvoiding(g: GridShape, cells: readonly number[], blocked: 
   ];
   for (const [eps, it] of tries) {
     const pts = chaikin(eps > 0 ? simplify(raw, g.cell * eps) : raw, it);
-    if (pts.every((q) => !blocked.data[cellAt(g, q.x, q.y)])) return pts;
+    if (!pts.every((q) => !blocked.data[cellAt(g, q.x, q.y)])) continue;
+    let clear = true;
+    for (let i = 1; i < pts.length && clear; i++) clear = walkCells(g, pts[i - 1]!, pts[i]!, allowed);
+    if (clear) return pts;
   }
   return raw;
 }

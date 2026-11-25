@@ -95,8 +95,8 @@ const mat = (color: number): MeshStandardMaterial =>
  * whatever the depth-buffer precision. Everything standing on the ground (buildings, characters,
  * markers) writes depth as usual and is drawn afterwards.
  */
-const DEPTH_PREPASS_ORDER = -10;
-const GROUND_ORDER = { sea: -3, land: -2, far: -1.5, apron: -1.45, water: -1.4, city: -1 } as const;
+export const DEPTH_PREPASS_ORDER = -10;
+export const GROUND_ORDER = { sea: -3, land: -2, far: -1.5, apron: -1.45, water: -1.4, city: -1 } as const;
 
 /**
  * Ground layers are painted in order and write no depth (see GROUND_ORDER), so by themselves a hill hides nothing behind it:
@@ -112,6 +112,12 @@ export function depthPrepass(ground: Mesh, name = `${ground.name}:depth`): Mesh 
   mesh.renderOrder = DEPTH_PREPASS_ORDER;
   mesh.name = name;
   return mesh;
+}
+
+/** Adds a terrain ground mesh to the scene together with its depth prepass; every terrain ground must go through here. */
+export function addGround(scene: Object3D, ground: Mesh): Mesh {
+  scene.add(ground, depthPrepass(ground));
+  return ground;
 }
 
 function asGround<T extends Mesh>(mesh: T, order: number): T {
