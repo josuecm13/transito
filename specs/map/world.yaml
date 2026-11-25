@@ -534,6 +534,19 @@ procedural:
       # within this distance of its stretch of road.
       - { id: el-corredor, seed_along: { route: interamericana, from: city, reach: 400 }, target_km2: 0.6, road_affinity: 3, patches: { wavelength: 260, threshold: 0.3 } }
       - { id: gamboa, seeds: [[1420, 3050]], target_km2: 0.1 }
+  # Coarse district influence (#13), refined AFTER towns and transit: D(p) = S·G·[Σ w·exp(-(d/σ)²)·(1+coast) + transit].
+  # No items = off (the map is exactly the towns + transit result). Items are added with presets by the
+  # map studio (`add-district`); each is `{ id, style, at: [x, y] | along: <road route> | around: airport, sigma, weight }`.
+  districts:
+    transit_weight: 0.4         # density added around metro stations (0..1)
+    transit_sigma: 450          # m
+    coast_weight: 0.3           # bayfront boost inside districts (never a coastal sprawl on its own)
+    coast_sigma: 500            # m
+    access_floor: 0.5           # share of density kept far from main roads
+    access_range: 250           # m from a main road at which access falls off
+    footprint: 0.25             # D at which a district counts as present
+    airport_core_gap: 600       # m: dense core (D >= 0.5) stays this far from the airfield
+    items: []
   cover:
     seed: 19
     beach_width: 25             # m

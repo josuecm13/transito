@@ -1,3 +1,4 @@
+| 2026-11-25 | [Map Studio (#13)](runs/2026-11-25-map-studio.md) | map (#13) | cards 1–8 verdes (núcleo, CLI, guardas, distritos, UI, docs, benchmarks); abierto: política de extensión del mapa; sin commit |
 # Orchestrator run log — index
 
 One line per run, newest first. Each run has its own file in `runs/` (`<date>-<milestone>-<slug>.md`)

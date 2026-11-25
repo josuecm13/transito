@@ -11,13 +11,16 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Plugin } from 'vite';
+import { EDITS_FILE } from '../src/studio/saved.ts';
 
 const ID = 'virtual:isthmus';
 const RESOLVED = `\0${ID}`;
 
-// The bake's inputs: world.yaml and every .ts under src/world (tests/proc-isthmus-codec.test.ts checks they cover the generator's imports).
+// The bake's inputs: world.yaml, the saved studio edits when present, and every .ts under src/world (tests/proc-isthmus-codec.test.ts checks they cover the generator's imports).
 export function inputFiles(root: string): string[] {
   const out = [join(root, 'specs/map/world.yaml')];
+  // Map Studio's saved edits (#13) are applied on top of world.yaml by the bake: a Save must rebake.
+  if (existsSync(join(root, EDITS_FILE))) out.push(join(root, EDITS_FILE));
   const walk = (dir: string): void => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const p = join(dir, e.name);

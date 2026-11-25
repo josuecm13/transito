@@ -5,6 +5,7 @@ import type { ScaleSpec } from './scale.ts';
 import { storeyRange, streetScaleProblems } from './scale.ts';
 import type { AirportParams } from './proc/airport.ts';
 import type { CoverParams } from './proc/cover.ts';
+import { DISTRICT_STYLES, type DistrictItem, type DistrictParams } from './proc/districts.ts';
 import type { LakeParams } from './proc/lake.ts';
 import type { Octaves } from './proc/noise.ts';
 import type { ReliefParams, UpliftZone } from './proc/relief.ts';
@@ -266,6 +267,8 @@ export interface ProceduralSpec {
   towns: Omit<GrowthParams, 'towns' | 'separation'> & { separation: number; airportBuffer: number; items: ProcTown[] };
   cover: CoverParams;
   transit: Omit<TransitParams, 'lines'> & { stops: Record<string, Vec2>; lines: ProcLine[] };
+  /** Coarse district influence field, refined after transit (procedural.districts; src/world/proc/districts.ts). Empty items = off. */
+  districts: DistrictParams;
   /** Act 1 placement, derived from the generated transit track (procedural.act1; src/world/proc/act1.ts). */
   act1: ProcAct1;
   /** Landmarks the procedural map places by rule (procedural.landmarks; src/world/proc/landmarks.ts). */
@@ -1460,7 +1463,7 @@ class ProcReader {
 function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; height: number }, landmarkIds: readonly string[], districtIds: readonly string[]): ProceduralSpec {
   const P = new ProcReader(r, bounds);
   const path = 'procedural';
-  const o = P.sec(raw, path, ['cell', 'relief', 'lake', 'rivers', 'canal', 'airport', 'roads', 'suitability', 'towns', 'cover', 'transit', 'act1', 'landmarks', 'game']) ?? {};
+  const o = P.sec(raw, path, ['cell', 'relief', 'lake', 'rivers', 'canal', 'airport', 'roads', 'suitability', 'towns', 'cover', 'transit', 'act1', 'landmarks', 'game'], ['districts']) ?? {};
   const cell = o.cell === undefined ? NaN : P.num(o, 'cell', path, 'pos');
   const roads = parseProcRoads(P, o.roads, `${path}.roads`);
   const towns = parseProcTowns(P, o.towns, `${path}.towns`, roads.routes);
@@ -1477,6 +1480,7 @@ function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; heigh
     towns,
     cover: parseProcCover(P, o.cover, `${path}.cover`),
     transit,
+    districts: parseProcDistricts(P, o.districts, `${path}.districts`, roads.routes),
     act1: parseProcAct1(P, o.act1, `${path}.act1`, transit.lines, towns.items),
     landmarks: parseProcLandmarks(P, o.landmarks, `${path}.landmarks`, landmarkIds),
     game: parseProcGame(P, o.game, `${path}.game`, towns.items, districtIds, bounds),
@@ -1760,6 +1764,48 @@ function parseProcTowns(P: ProcReader, raw: unknown, path: string, routes: reado
     seed: P.num(o, 'seed', path),
     separation: P.num(o, 'separation', path, 'nonneg'),
     airportBuffer: P.num(o, 'airport_buffer', path, 'nonneg'),
+    items,
+  };
+}
+
+const DISTRICT_DEFAULTS: DistrictParams = { transitWeight: 0.4, transitSigma: 450, coastWeight: 0.3, coastSigma: 500, accessFloor: 0.5, accessRange: 250, footprint: 0.25, airportCoreGap: 600, items: [] };
+
+function parseProcDistricts(P: ProcReader, raw: unknown, path: string, routes: readonly ProcRoute[]): DistrictParams {
+  if (raw === undefined) return DISTRICT_DEFAULTS;
+  const o = P.sec(raw, path, ['transit_weight', 'transit_sigma', 'coast_weight', 'coast_sigma', 'access_floor', 'access_range', 'footprint', 'airport_core_gap', 'items']) ?? {};
+  const items = listOf(P.r, o.items, `${path}.items`).flatMap((raw2, i): DistrictItem[] => {
+    const p = `${path}.items[${i}]`;
+    const t = P.sec(raw2, p, ['id', 'style', 'sigma', 'weight'], ['at', 'along', 'around']);
+    if (!t) return [];
+    const style = P.r.str(t, 'style', p) as DistrictItem['style'];
+    if (!DISTRICT_STYLES.includes(style)) P.r.problems.push(`${p}.style: unknown style '${style}' (${DISTRICT_STYLES.join(', ')})`);
+    const where = ['at', 'along', 'around'].filter((k) => t[k] !== undefined);
+    if (where.length !== 1) P.r.problems.push(`${p}: expected exactly one of at, along, around`);
+    const out: { -readonly [K in keyof DistrictItem]: DistrictItem[K] } = { id: P.r.str(t, 'id', p), style, sigma: P.num(t, 'sigma', p, 'pos'), weight: P.num(t, 'weight', p) };
+    if (!(out.weight >= -1 && out.weight <= 1)) P.r.problems.push(`${p}.weight: expected a number in [-1, 1]`);
+    if (t.at !== undefined) out.at = P.at(t.at, `${p}.at`);
+    if (t.along !== undefined) {
+      out.along = P.r.str(t, 'along', p);
+      const rt = routes.find((x) => x.id === out.along);
+      if (!rt) P.r.problems.push(`${p}.along: unknown route '${out.along}'`);
+      else if (rt.kind === 'rail') P.r.problems.push(`${p}.along: '${out.along}' is a railroad; districts follow roads`);
+    }
+    if (t.around !== undefined) {
+      if (t.around !== 'airport') P.r.problems.push(`${p}.around: only 'airport' is supported`);
+      out.around = 'airport';
+    }
+    return [out];
+  });
+  P.unique(items.map((t) => t.id), `${path}.items`);
+  return {
+    transitWeight: P.num(o, 'transit_weight', path, 'frac'),
+    transitSigma: P.num(o, 'transit_sigma', path, 'pos'),
+    coastWeight: P.num(o, 'coast_weight', path, 'nonneg'),
+    coastSigma: P.num(o, 'coast_sigma', path, 'pos'),
+    accessFloor: P.num(o, 'access_floor', path, 'frac'),
+    accessRange: P.num(o, 'access_range', path, 'pos'),
+    footprint: P.num(o, 'footprint', path, 'frac'),
+    airportCoreGap: P.num(o, 'airport_core_gap', path, 'nonneg'),
     items,
   };
 }

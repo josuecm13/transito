@@ -174,10 +174,20 @@ reads this map (#12), the authored layers above stay in use and the two coexist.
 | `roads` | grade costs per kind, bridge / causeway / canal-bridge / reuse multipliers, named `stops` and the `routes` that join them |
 | `suitability` | where towns may build: slope, height band, coast preference, river crossing |
 | `towns` | growth tuning and `items`: each town has `seeds` **or** `seed_along: { route, from, reach? }` (seeded along that road from its stop towards the route's end, discounted near that stretch, and built only within `reach` m of it when set), and a `target_km2`; optional `road_affinity` and `patches` (unbuilt gaps from a noise field). `separation` keeps unbuilt ground between different towns, `airport_buffer` keeps towns off the airfield's surroundings |
+| `districts` | optional; coarse district influence refined after towns and transit (never recomputes terrain, roads, towns or tracks). `D(p) = clamp(S·G·[Σ w·exp(-(d/σ)²)·(1+coast) + transit])`; tuning `transit_weight/sigma`, `coast_weight/sigma`, `access_floor/range`, `footprint`, `airport_core_gap`, and `items: [{ id, style, sigma, weight, at \| along \| around }]` (`at` a point, `along` a road route, `around: airport`; `weight` in [-1, 1], negative pushes density away). Empty `items` = off, the map is exactly the towns + transit result. Styles are metadata for #7 (`historic-core`, `bayfront-linear`, `tower-cluster`, `hillside-lowrise`, `ribbon`, `port`, `buffer`). Presets live in `src/studio/presets.ts`; the studio adds them with `add-district` |
 | `cover` | beach, mangrove, clearings and high forest thresholds |
 | `transit` | named `stops` and the metro / rail `lines`; each branch is a list of stop ids |
 | `act1` | Act 1 placement, derived from the generated map (#12 2.2): Tito's barrio is centred at `anchor_at` of the track of `line`'s one branch ending at `branch_to`, with `barrio_radius`; the Act 1 strip is that track from the anchor to the branch end, `strip_half_width` each side. `town` is the town the barrio must belong to (reported as a share of built cells). No coordinates: when the line moves, Act 1 moves with it (`src/world/proc/act1.ts`, `Isthmus.act1`) |
 | `landmarks` | Act 1 and airport landmarks placed by rule, never by coordinates (#12 2.3): `anchor` (the act1 anchor), `{ along: m }` (that far along the act1 strip), `{ steepest_within: m }` (the steepest built cell of the act1 town that close to the anchor), `{ airport: terminal \| apron }`. Town spots snap to the nearest built cell of the act1 town. Output `Isthmus.landmarks` (`src/world/proc/landmarks.ts`). The `x`/`y` in `landmarks:` keep driving the current game until #12 2.5 |
+
+### Map Studio edits (`procedural-edits.json`)
+
+`world.yaml` stays the hand-readable source (comments included). The Map Studio (#13, `map-studio.html`, `tools/map-studio.ts`)
+saves its changes to `specs/map/procedural-edits.json`: `{ "version": 1, "edits": [{ "path", "value" }] }`, a sorted list of
+differences from `world.yaml`'s `procedural:` section (paths like `procedural.towns.items[id=la-ciudad].target_km2`). The
+studio, `tools/render-isthmus.ts` and `tools/bake-isthmus.ts` apply it on top of `world.yaml` (`src/studio/saved.ts`); it is a
+bake input, so saving rebakes the game's map. No file = the authored map. The `world.yaml` schema itself is unchanged.
+Protocol and controls: `docs/map-reshape/map-studio-protocol.md`.
 
 Stops are named, not inlined. `airport-terminal` is reserved: it means the generated airport's
 terminal and may not be defined as a stop. Every key is strict (unknown keys are errors) and the

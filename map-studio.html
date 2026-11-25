@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <title>TRÁNSITO - Map Studio</title>
+    <style>
+      :root { --bg: #14181c; --panel: #1d2329; --line: #2d363e; --fg: #dde3e8; --dim: #8b98a3; --acc: #e8943a; --bad: #e0605a; --ok: #6cc08b; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font: 13px/1.35 system-ui, sans-serif; }
+      #app { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: 40px 1fr 28px; height: 100%; }
+      #bar { grid-column: 1 / 3; display: flex; gap: 6px; align-items: center; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+      #bar .sp { flex: 1; }
+      button, select, input { font: inherit; color: var(--fg); background: #262e36; border: 1px solid var(--line); border-radius: 4px; }
+      button { padding: 3px 9px; cursor: pointer; }
+      button:hover:not(:disabled) { border-color: var(--acc); }
+      button:disabled { opacity: .4; cursor: default; }
+      #view { position: relative; overflow: hidden; background: #0c0f12; }
+      #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+      #layers { position: absolute; left: 8px; top: 8px; background: rgba(29,35,41,.92); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; display: grid; gap: 2px; }
+      #layers label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+      #msg { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); max-width: 70%; padding: 6px 12px; border-radius: 6px; background: rgba(29,35,41,.95); border: 1px solid var(--line); display: none; white-space: pre-wrap; }
+      #msg.bad { border-color: var(--bad); color: #ffd5d2; display: block; }
+      #msg.ok { border-color: var(--ok); display: block; }
+      #side { overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); }
+      #side h2 { margin: 0; padding: 7px 12px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; background: #232b33; cursor: pointer; position: sticky; top: 0; z-index: 1; }
+      #side h2::before { content: '▾ '; color: var(--dim); }
+      #side section.closed h2::before { content: '▸ '; }
+      #side section.closed .body { display: none; }
+      .body { padding: 6px 12px 10px; }
+      .row { display: grid; grid-template-columns: 1fr 96px 34px; gap: 6px; align-items: center; margin: 5px 0; }
+      .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .row .u { color: var(--dim); }
+      .row input { width: 100%; padding: 2px 5px; }
+      .row input.pt { width: 46px; }
+      .row .pts { display: flex; gap: 4px; }
+      .row.locked .name::after { content: ' 🔒'; }
+      .desc { grid-column: 1 / 4; color: var(--dim); font-size: 11px; margin-top: -3px; }
+      .sub { color: var(--dim); margin: 10px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+      #metrics { font: 11px/1.4 ui-monospace, monospace; color: var(--dim); white-space: pre-wrap; padding: 6px 12px 10px; }
+      #metrics b { color: var(--fg); font-weight: 600; }
+      .viol { color: var(--bad); }
+      #status { grid-column: 1 / 3; display: flex; gap: 14px; align-items: center; padding: 0 10px; background: var(--panel); border-top: 1px solid var(--line); color: var(--dim); }
+      #status .bad { color: var(--bad); } #status .ok { color: var(--ok); }
+      #cmp { display: none; align-items: center; gap: 6px; }
+      #cmp.on { display: flex; }
+      .note { color: var(--dim); font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="bar">
+        <strong>Map Studio</strong>
+        <button id="undo" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+        <button id="redo" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+        <button id="reset" title="Back to the authored map">Reset</button>
+        <label><input type="checkbox" id="compare" /> Compare with authored</label>
+        <span id="cmp"><input type="range" id="split" min="0" max="100" value="50" /> <span class="note">authored | edited</span></span>
+        <span class="sp"></span>
+        <button id="fit">Fit</button>
+        <button id="download" title="Download the working edits as JSON">Download edits</button>
+        <button id="save" title="Validate at the authored cell and write specs/map/procedural-edits.json (dev server)">Save</button>
+      </div>
+      <div id="view">
+        <canvas id="cv"></canvas>
+        <div id="layers"></div>
+        <div id="msg"></div>
+      </div>
+      <div id="side"></div>
+      <div id="status"><span id="st-gen">starting…</span><span id="st-pos"></span><span id="st-edits"></span></div>
+    </div>
+    <script type="module" src="/src/studio/ui/main.ts"></script>
+  </body>
+</html>

@@ -6,10 +6,10 @@
  *
  * Output is gitignored (.cache/). Pure pipeline: same spec + params, same image.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseWorldSpec } from '../src/world/spec.ts';
+import { EDITS_FILE, parseWorldWithEdits } from '../src/studio/saved.ts';
 import { generateIsthmus, isthmusRenderInput } from '../src/world/proc/isthmus.ts';
 import { encodePng } from '../src/world/proc/png.ts';
 import { renderMap } from '../src/world/proc/render.ts';
@@ -24,7 +24,7 @@ const out = isAbsolute(outArg) ? outArg : join(ROOT, outArg);
 const mpp = Number(arg('mpp', '5'));
 const cell = Number(arg('cell', '20'));
 
-const spec = parseWorldSpec(readFileSync(join(ROOT, 'specs/map/world.yaml'), 'utf8'));
+const spec = parseWorldWithEdits(readFileSync(join(ROOT, 'specs/map/world.yaml'), 'utf8'), existsSync(join(ROOT, EDITS_FILE)) ? readFileSync(join(ROOT, EDITS_FILE), 'utf8') : undefined);
 const t0 = performance.now();
 const iso = generateIsthmus(spec, { cell });
 const t1 = performance.now();

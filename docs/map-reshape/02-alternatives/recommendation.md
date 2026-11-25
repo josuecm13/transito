@@ -92,7 +92,7 @@ Director answers to the twelve questions above, verbatim:
 6. cover refinement pass after relief+rivers allowed
 7. Interamericana absorbs corridor-avenue and the city end of transisthmian-highway
 8. water_bodies yes, cable-bridge onto the channel
-9. keep 2×1,500 m runways; Albrook landmark only
+9. keep 2×1,500 m runways; Albrook landmark only. **Superseded (2026-11-23, #12):** the procedural map uses 2 × 1,200 m runways 260 m apart, heading 10–30° (`procedural.airport` in `specs/map/world.yaml`); 2 × 1,500 m at 700 m made the field half the city. Albrook landmark only still holds.
 10. Corredor Sur yes, viaduct bay side, Corredor Norte no, anchors = proposed list
 11. 16 m far grid yes
 12. CLAUDE.md rule 5 wording pending the director

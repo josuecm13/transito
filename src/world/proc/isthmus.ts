@@ -9,15 +9,16 @@
  * lock / airport hints, town seeds and target areas, route stops. Every shape on the map is computed.
  * Pure and deterministic.
  */
-import { AIRPORT_TERMINAL_STOP, type WorldSpec } from '../spec.ts';
+import { AIRPORT_TERMINAL_STOP, type ProceduralSpec, type WorldSpec } from '../spec.ts';
 import type { Vec2 } from '../vec.ts';
 import { levelAirport, siteAirport, type AirportResult } from './airport.ts';
 import { classifyCover } from './cover.ts';
+import { growDistricts, type DistrictsResult } from './districts.ts';
 import { cellAt, distanceFrom, makeShape, mask, type FieldGrid, type MaskGrid } from './grid.ts';
 import { slopeField } from './hydrology.ts';
 import { floodReservoir, type LakeResult } from './lake.ts';
 import { generateRelief, type ReliefResult } from './relief.ts';
-import type { Dot, RenderInput, Stroke } from './render.ts';
+import { COVER_MANGROVE, type Dot, type RenderInput, type Stroke } from './render.ts';
 import { nearRoads, routeRoads, type RoadsResult } from './roads.ts';
 import { growTowns, suitability, type GrowthResult, type TownSpec } from './settlements.ts';
 import { routeTransit, type TransitResult } from './transit.ts';
@@ -35,6 +36,8 @@ export interface Isthmus {
   readonly airport: AirportResult;
   readonly roads: RoadsResult;
   readonly towns: GrowthResult;
+  /** Coarse district influence field, computed after transit (procedural.districts). */
+  readonly districts: DistrictsResult;
   readonly cover: Uint8Array;
   readonly transit: TransitResult;
   /** Act 1 placement derived from the transit track (procedural.act1). */
@@ -99,8 +102,12 @@ function clipOutside(rivers: readonly RiverSegment[], ring: readonly Vec2[]): Ri
   return out;
 }
 
-export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): Isthmus {
-  const P = spec.procedural;
+/**
+ * `opts.config` replaces `spec.procedural` (Map Studio edits, #13): the same shape the parser returns,
+ * so the default config reproduces the default map exactly.
+ */
+export function generateIsthmus(spec: WorldSpec, opts: { cell?: number; config?: ProceduralSpec } = {}): Isthmus {
+  const P = opts.config ?? spec.procedural;
   const cell = opts.cell ?? P.cell;
   const shape = makeShape(spec.bounds.width, spec.bounds.height, cell);
   const report: string[] = [];
@@ -248,6 +255,23 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
   const A = P.act1;
   const track = transit.lines.find((l) => l.id === A.line)?.tracks[A.branch];
   if (!track || track.length < 2) throw new Error(`act1: no routed track for ${A.line} branch ${A.branch}`);
+  // Districts refine density after the envelope and the routing: nothing above is recomputed.
+  const metroLines = new Set(transit.lines.filter((l) => l.mode === 'metro').map((l) => l.id));
+  const districtBlocked = mask(shape);
+  for (let i = 0; i < districtBlocked.data.length; i++) districtBlocked.data[i] = riverMask.data[i] || cover[i] === COVER_MANGROVE ? 1 : 0;
+  const airfieldMask = mask(shape);
+  for (let gy = 0; gy < shape.h; gy++)
+    for (let gx = 0; gx < shape.w; gx++) if (insideRing({ x: (gx + 0.5) * cell, y: (gy + 0.5) * cell }, airport.field)) airfieldMask.data[gy * shape.w + gx] = 1;
+  const districts = growDistricts(shape, P.districts, {
+    suitability: suit,
+    blocked: districtBlocked,
+    roads: highways,
+    distToSea: relief.distToSea,
+    stations: transit.stations.filter((s) => s.lines.some((l) => metroLines.has(l))).map((s) => s.at),
+    routeCells: new Map(roads.paths.map((r) => [r.id, r.cells] as const)),
+    airfield: airfieldMask,
+  });
+  if (P.districts.items.length) report.push(`districts: ${districts.ids.map((id, k) => `${id} ${districts.areasKm2[k]!.toFixed(2)} km²`).join(', ')}; dense ${districts.denseKm2.toFixed(2)} km²`);
   const act1 = placeAct1(track, towns.owner, towns.density, relief.land, lake.lake, { ...A, town: A.townIndex });
   report.push(
     `act1: ${A.line} → ${A.branchTo} at ${A.anchorAt}: anchor (${act1.anchor.x.toFixed(0)}, ${act1.anchor.y.toFixed(0)})${act1.anchorDry ? '' : ' NOT DRY'}, ` +
@@ -259,7 +283,7 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number } = {}): 
     .map((r) => ({ points: r.points, clear: (spec.streetProfiles[r.kind]?.width ?? 0) / 2 + sidewalkMax }));
   const landmarks = placeLandmarks(P.landmarks, act1, airport, towns.owner, height, A.townIndex, clearOf);
   report.push(`landmarks: ${landmarks.map((l) => `${l.id} (${l.at.x.toFixed(0)}, ${l.at.y.toFixed(0)})`).join(', ')}`);
-  return { relief, height, lake, rivers, canal, airport, roads, towns, cover, transit, act1, landmarks, report };
+  return { relief, height, lake, rivers, canal, airport, roads, towns, districts, cover, transit, act1, landmarks, report };
 }
 
 const RIVER_BLUE: [number, number, number] = [52, 112, 166];

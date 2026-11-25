@@ -20,6 +20,15 @@ only the file you need. Never load the whole tree at once.
 | 3 | [`03-technical/`](03-technical/README.md) | The maths and utilities that make the chosen approach replicable (one file per utility) | When implementing or testing a utility |
 | 4 | [`04-features/`](04-features/README.md) | The feature list: ids, priority, dependencies, acceptance criteria | When planning or picking up work |
 
+## Map Studio (#13)
+
+| File | What it covers |
+|---|---|
+| [`map-studio-protocol.md`](map-studio-protocol.md) | The edit protocol, refusals, files, the page, benchmarks |
+| [`map-studio-math.md`](map-studio-math.md) | What each control does, the district formula, the guards |
+| [`map-studio-agent-workflow.md`](map-studio-agent-workflow.md) | An agent session with real requests and refusals |
+| [`map-studio-causality.md`](map-studio-causality.md) | Measured: which stages each edit changes |
+
 ## Director decisions of 2026-11-22 (override the brief where they conflict)
 
 1. The current map shape stays (`geometry.land`, 6 x 8 km, islands); rotation/reshape ideas are dropped.
