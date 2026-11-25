@@ -5,6 +5,7 @@ with goal, decisions, cards (agent/model/outcome/fix rounds), escalations and op
 
 | Date | Run | Milestone | Status |
 |---|---|---|---|
+| 2026-11-24 | [Pendientes: verificación visual, guardas, #12 comentarios, plan #11](runs/2026-11-24-pendientes-guardas-y-lod.md) | map (#12 comentarios, #11 plan) | guarda depthPrepass + smoothAvoiding por segmentos (verdes, sin commit); growTowns ya estaba arreglado; Línea 2 en open-questions #12; plan LOD #11 propuesto; punto de vista del carro no verificado |
 | 2026-11-24 | [Mapa: verificación, decisiones y plan de distritos](runs/2026-11-24-mapa-distritos-plan.md) | map (#12 2.2–2.5, #13 paso 7) | A+B en main (`63698a0`, push); C+D en main (`b3c44ba`); F1–F6 verdes sin commit (walk-graph arreglado; cobertura procedural en suelo y mapas; capas authored retiradas; istmo horneado en el build, arranque 5,1 s → 0,35 s) |
 | 2026-11-23 | [Mapa: composición A1+A2+B1](runs/2026-11-23-mapa-composicion.md) | map (#12 antes de 2.2, #13) | hecho: separación, aeropuerto aislado, El Corredor en cinta; sin commit |
 | 2026-11-23 | [Mapa: verificación y opciones](runs/2026-11-23-mapa-opciones.md) | map (#12 / #13) | plan — director eligió el orden recomendado |

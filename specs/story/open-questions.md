@@ -14,6 +14,7 @@ the decision is made and move it to the "Decided" section.
 | 9 | Valeria's former identity | Accountant who rose to boss / always a criminal | Accountant who rose to boss, keeps a consulting firm as a front |
 | 10 | Names of Los Muelles' leader and El Consorcio's envoy | — | TBD |
 | 11 | Is there any alternate ending | Single fixed ending / player choice | Single fixed ending: the cartel wins regardless |
+| 12 | Línea 2 del metro: ¿una línea con dos ramales o dos líneas? | Una línea, dos ramales / Dos líneas con identidad propia | Una línea con dos ramales: Balboa → Casco → bahía este, y hub norte → aeropuerto (los dos trazados no están conectados entre sí hoy); el ferrocarril sigue como modo aparte |
 
 ## Decided
 
