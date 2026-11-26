@@ -14,7 +14,7 @@ export function createWorldLabels(
   parent: HTMLElement,
   camera: Camera,
   labels: readonly WorldLabel[],
-): { update(): void } {
+): { update(): void; dispose(): void } {
   const layer = document.createElement('div');
   layer.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none';
   parent.append(layer);
@@ -29,6 +29,7 @@ export function createWorldLabels(
   });
   const v = new Vector3();
   return {
+    dispose: () => layer.remove(),
     update() {
       camera.updateMatrixWorld();
       const w = window.innerWidth;

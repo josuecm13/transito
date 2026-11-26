@@ -1,0 +1,75 @@
+# TRÁNSITO sector table: the 7 land sectors the whole isthmus is partitioned into (data only).
+# Provenance: docs/map-reshape/03-technical/12-sectors-and-streaming.md, section 1.2 (partition, accepted by the
+# director 2026-11-25, Q1) and 1.3 (districts, tiers, neighbours). Read by src/world/sectors.ts.
+# Meters; origin SW corner; +x east, +y north (same frame as world.yaml).
+#
+# Every sector is a list of `boxes` [minX, minY, maxX, maxY]; all boxes tile the extent. `ribera` and `ciudad` share one
+# box (`side`: west|east of the border) and are split by `canal_border`: ribera is west of it, ciudad east of it. Boxes are half-open
+# (min <= v < max); the extent's far edges belong to the last cell.
+# The sea is not a sector (doc S3): points outside the extent clamp to the nearest sector.
+# `districts` lists world.yaml district ids; `pacific-locks` and `city-core` straddle borders, so they appear twice.
+# `neighbours` is symmetric and means "boxes share a border segment" (doc 1.3 and 2.3).
+# Only `corredor` is tier `full` (CLAUDE.md rule 5); `blocks` = grey blocks, `silhouette` = far shape only.
+#
+# Borders taken from the doc: limon y >= 6500; lago y 3150-6500 (x < 2900 above y 3950, x < 3300 below);
+# corte y 2400-3150; corredor x 2900-6000, y 0-3950; cordillera x >= 3300, y >= 3950.
+# Chosen here (doc gives a polyline only as "x ~1190-1450"): canal_border follows the generated canal
+# centreline measured in doc 0.1 / 2.3: x 1188 @ y 455, 1190 @ y 1060, 1351 @ y 1473, 1450 @ y 2400,
+# extended straight to y 0 (x 1188) at the south end.
+
+extent: { width: 6000, height: 8000 }
+
+canal_border: [[1188, 0], [1188, 455], [1190, 1060], [1351, 1473], [1450, 2400]]
+
+sectors:
+  - id: limon
+    name: Bahía de Limón
+    tier: blocks
+    boxes: [[0, 6500, 3300, 8000]]
+    districts: [colon]
+    neighbours: [lago, cordillera]
+
+  - id: lago
+    name: Lago Gatún
+    tier: silhouette
+    # L-shape: the upper arm (x < 2900, y 3150-3950) and the body (x < 3300, y 3950-6500)
+    boxes: [[0, 3150, 2900, 3950], [0, 3950, 3300, 6500]]
+    districts: [gatun-lake]
+    neighbours: [limon, corte, corredor, cordillera]
+
+  - id: corte
+    name: El Corte
+    tier: silhouette
+    boxes: [[0, 2400, 2900, 3150]]
+    districts: [canal-central]
+    neighbours: [lago, ciudad, ribera, corredor]
+
+  - id: ribera
+    name: La Ribera
+    tier: blocks
+    boxes: [[0, 0, 2900, 2400]]
+    side: west
+    districts: [pacific-locks]
+    neighbours: [ciudad, corte]
+
+  - id: ciudad
+    name: La Ciudad
+    tier: blocks
+    boxes: [[0, 0, 2900, 2400]]
+    side: east
+    districts: [city-core, pacific-locks]
+    neighbours: [ribera, corte, corredor]
+
+  - id: corredor
+    name: El Corredor
+    tier: full
+    boxes: [[2900, 0, 6000, 3950]]
+    districts: [tito-corridor, airport, costa-del-este, city-core]
+    neighbours: [ciudad, corte, lago, cordillera]
+
+  - id: cordillera
+    name: La Cordillera
+    tier: silhouette
+    boxes: [[3300, 3950, 6000, 8000]]
+    districts: [jungle-ridge]
+    neighbours: [limon, lago, corredor]

@@ -3,7 +3,12 @@
  * reports them all, and an edit that breaks one is refused (the last valid state is kept). Every guard has a
  * mutation test (tests/studio-guards.test.ts): break the thing it protects → red.
  */
+import { fieldDistance } from '../world/proc/airport.ts';
+import { act1Rect } from '../world/proc/game-spec.ts';
+import { sample } from '../world/proc/grid.ts';
+import { TRAIL_FENCE_M } from '../world/proc/trails.ts';
 import type { Isthmus } from '../world/proc/isthmus.ts';
+import { routeCrossing } from '../world/proc/landmarks.ts';
 import { AIRPORT_TERMINAL_STOP, type ProceduralSpec } from '../world/spec.ts';
 import type { Vec2 } from '../world/vec.ts';
 import { metricsOf, type Metrics } from './metrics.ts';
@@ -76,6 +81,14 @@ function components(mask: Uint8Array, w: number, h: number): number {
     }
   }
   return n;
+}
+
+function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
 function nearWater(iso: Isthmus, p: Vec2, r: number): boolean {
@@ -193,9 +206,113 @@ export const GUARDS: Readonly<Record<string, Guard>> = {
     }
     return undefined;
   },
+  'airport-pad-floats': ({ iso, config }) => {
+    const s = config.airport.gradeSlopeMax;
+    const reach = config.airport.gradeReachMax;
+    if (!(s > 0)) return 'airport.grade_slope_max is 0 (the legacy fixed 150 m blend): the pad ends in cliffs; use a slope above 0';
+    const { w, h, cell, data } = iso.height;
+    const nat = iso.relief.height.data;
+    const a = iso.airport;
+    const dist = (i: number) => fieldDistance(a, ((i % w) + 0.5) * cell, (Math.floor(i / w) + 0.5) * cell);
+    let worst = 0;
+    let at = -1;
+    let drift = 0;
+    let driftAt = -1;
+    for (let gy = 0; gy < h; gy++) {
+      for (let gx = 0; gx < w; gx++) {
+        const i = gy * w + gx;
+        const d = dist(i);
+        if (d >= reach) continue;
+        if (d >= reach - cell && Math.abs(data[i]! - nat[i]!) / cell > drift) {
+          drift = Math.abs(data[i]! - nat[i]!) / cell;
+          driftAt = i;
+        }
+        if (d >= reach * 0.75) continue;
+        for (const [ox, oy] of [[1, 0], [0, 1], [1, 1], [1, -1]] as const) {
+          const x = gx + ox;
+          const y = gy + oy;
+          if (x >= w || y < 0 || y >= h) continue;
+          const j = y * w + x;
+          if (dist(j) >= reach * 0.75) continue;
+          const slope = Math.abs(data[j]! - data[i]!) / (cell * Math.hypot(ox, oy));
+          if (slope > worst) {
+            worst = slope;
+            at = i;
+          }
+        }
+      }
+    }
+    const tol = 1.02;
+    const where = (i: number) => `(${(((i % w) + 0.5) * cell).toFixed(0)}, ${((Math.floor(i / w) + 0.5) * cell).toFixed(0)})`;
+    if (worst > s * tol) return `the airfield embankment is ${worst.toFixed(2)} m/m steep at ${where(at)} (limit ${s}): the pad floats above its surroundings`;
+    if (drift > s * tol) return `the airfield grading stops ${(drift * cell).toFixed(0)} m off the natural ground at ${where(driftAt)}: grade_reach_max ${reach} m is too short`;
+    return undefined;
+  },
+  'bridge-landmarks-on-crossing': ({ iso }) => {
+    for (const l of iso.landmarks) {
+      const r = l.rule;
+      if (r.kind !== 'crossing') continue;
+      const route = iso.roads.paths.find((p) => p.id === r.route);
+      const x = route ? routeCrossing(route.points, iso.canal.centreline) : null;
+      if (!x?.crosses) return `bridge landmark ${l.id}: the generated route ${r.route} does not cross the canal`;
+      const d = Math.hypot(l.at.x - x.at.x, l.at.y - x.at.y);
+      if (d > r.tolerance) return `bridge landmark ${l.id} is ${d.toFixed(0)} m from where ${r.route} crosses the canal (${x.at.x.toFixed(0)}, ${x.at.y.toFixed(0)}); the limit is ${r.tolerance} m`;
+    }
+    return undefined;
+  },
+  'trail-connected-and-grade': ({ iso, config }) => {
+    // Hiking trails (card 3, docs/map-reshape/03-technical/12-sectors-and-streaming.md 8.3). The rect is recomputed here,
+    // independently of the router, from the same Act 1 placement the game reads.
+    const { w, h, cell } = iso.height;
+    const rect = act1Rect(iso, config.game.rectMargin, { width: w * cell, height: h * cell });
+    const inRect = (q: Vec2, m = 0): boolean => q.x >= rect.minX + m && q.x <= rect.maxX - m && q.y >= rect.minY + m && q.y <= rect.maxY - m;
+    const tol = Math.max(60, 2 * cell);
+    for (const spec of config.trails) {
+      const t = iso.trails.find((x) => x.id === spec.id);
+      const id = spec.id;
+      if (!t || !t.found || t.points.length < 2) return `trail ${id}: no route from the terminal to a viewpoint (max_grade ${spec.maxGrade} may be too steep, or max_length ${spec.maxLength} m too short)`;
+      const first = t.points[0]!;
+      const last = t.points[t.points.length - 1]!;
+      const term = iso.airport.terminal;
+      if (Math.hypot(first.x - term.x, first.y - term.y) > tol) return `trail ${id} starts ${Math.hypot(first.x - term.x, first.y - term.y).toFixed(0)} m from the airport terminal (limit ${tol} m)`;
+      const vp = t.viewpoint;
+      if (Math.hypot(last.x - vp.x, last.y - vp.y) > cell) return `trail ${id} ends ${Math.hypot(last.x - vp.x, last.y - vp.y).toFixed(0)} m from its viewpoint`;
+      // The viewpoint obeys its rule: dry, inside the Act 1 rect (shrunk by margin), near the airfield, far enough from the start.
+      const v = spec.viewpoint;
+      if (Math.hypot(vp.x - term.x, vp.y - term.y) < v.minDistance) return `trail ${id}: the viewpoint is ${Math.hypot(vp.x - term.x, vp.y - term.y).toFixed(0)} m from the terminal; the rule needs at least ${v.minDistance} m`;
+      if (fieldDistance(iso.airport, vp.x, vp.y) > v.highestWithin) return `trail ${id}: the viewpoint is farther than ${v.highestWithin} m from the airfield`;
+      if (!inRect(vp, v.margin)) return `trail ${id}: the viewpoint is not inside the Act 1 rect shrunk by ${v.margin} m`;
+      let worst = 0;
+      let worstAt = first;
+      for (let k = 0; k < t.points.length; k++) {
+        const q = t.points[k]!;
+        if (!inRect(q)) return `trail ${id} leaves the Act 1 rect at (${q.x.toFixed(0)}, ${q.y.toFixed(0)})`;
+        const i = cellOf(iso, q);
+        if (isWater(iso, i)) return `trail ${id} runs through water at (${q.x.toFixed(0)}, ${q.y.toFixed(0)})`;
+        if (iso.rivers.some((r) => r.points.some((rp, j) => j > 0 && distToSegment(q, r.points[j - 1]!, rp) < r.width / 2))) return `trail ${id} runs through a river at (${q.x.toFixed(0)}, ${q.y.toFixed(0)})`;
+        if (k > 0 && iso.towns.owner[i]) return `trail ${id} crosses a built cell at (${q.x.toFixed(0)}, ${q.y.toFixed(0)})`;
+        if (fieldDistance(iso.airport, q.x, q.y) <= TRAIL_FENCE_M - 1) return `trail ${id} runs on the airfield at (${q.x.toFixed(0)}, ${q.y.toFixed(0)})`;
+        if (k > 0) {
+          const p = t.points[k - 1]!;
+          const len = Math.hypot(q.x - p.x, q.y - p.y);
+          const g = len > 0 ? Math.abs(sample(iso.height, q.x, q.y) - sample(iso.height, p.x, p.y)) / len : 0;
+          if (g > worst) {
+            worst = g;
+            worstAt = q;
+          }
+        }
+      }
+      if (worst > spec.maxGrade * 1.02) return `trail ${id} is ${worst.toFixed(2)} steep at (${worstAt.x.toFixed(0)}, ${worstAt.y.toFixed(0)}); max_grade is ${spec.maxGrade}`;
+      let length = 0;
+      for (let k = 1; k < t.points.length; k++) length += Math.hypot(t.points[k]!.x - t.points[k - 1]!.x, t.points[k]!.y - t.points[k - 1]!.y);
+      if (length < spec.minLength || length > spec.maxLength) return `trail ${id} is ${length.toFixed(0)} m long; the spec asks for ${spec.minLength}-${spec.maxLength} m`;
+    }
+    return undefined;
+  },
   'pinned-places-on-land': ({ iso }) => {
     if (!iso.act1.anchorDry) return 'the Act 1 anchor is not on dry land';
-    for (const l of iso.landmarks) if (isWater(iso, cellOf(iso, l.at))) return `landmark ${l.id} is on water`;
+    // A bridge sits on the canal by design: bridge-landmarks-on-crossing holds it instead.
+    for (const l of iso.landmarks) if (l.rule.kind !== 'crossing' && isWater(iso, cellOf(iso, l.at))) return `landmark ${l.id} is on water`;
     return undefined;
   },
   'wilderness-between-centres': ({ metrics }) => (metrics.wildernessShare >= 0.6 ? undefined : `wilderness is ${(metrics.wildernessShare * 100).toFixed(0)}% of land; it must stay ≥ 60%`),

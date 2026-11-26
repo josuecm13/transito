@@ -115,3 +115,58 @@ export function placeLabels(candidates: readonly LabelCandidate[], reserved: rea
   }
   return result;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Map-view LOD (doc 03.12 section 8.5): sharp near the player, softer and coarser with distance.
+// Pure; the DOM side (rasters, masks) lives in src/ui/map-base.ts and world-map-canvas.ts.
+// ---------------------------------------------------------------------------------------------
+
+export type MapTier = 0 | 1 | 2;
+
+/**
+ * Tier table, the single place for the LOD thresholds. `sharpRadiusPx` is the default M0 radius in
+ * screen px (the distance is measured in screen px, so the zoom is part of it); `m1Factor` and
+ * `m2Factor` multiply the M0 radius to give where M1 and M2 take over (a ramp of 2x the radius from
+ * M0 to M1). `metersPerPx` is the baked raster scale; `blurPx` is the blur at the far end of the
+ * tier's ramp (screen px at runtime, raster px for the bake of M1 / M2).
+ */
+export const MAP_TIERS = {
+  sharpRadiusPx: 420,
+  m1Factor: 3,
+  m2Factor: 9,
+  m0: { metersPerPx: 1, blurPx: 0 },
+  m1: { metersPerPx: 6, blurPx: 1.5 },
+  m2: { metersPerPx: 24, blurPx: 4 },
+} as const;
+
+/** Proposed cap for all map rasters together (doc 8.5: two M0 + M1 + M2 = about 72 MB, cap 80 MB). */
+export const MAP_RASTER_CAP_BYTES = 80_000_000;
+
+/** Bytes of an RGBA raster covering `widthM` x `heightM` at `metersPerPx` (same ceil as pixelFrame). */
+export function rasterBytes(widthM: number, heightM: number, metersPerPx: number): number {
+  return Math.ceil(widthM / metersPerPx) * Math.ceil(heightM / metersPerPx) * 4;
+}
+
+/** Radii (meters) where M0 ends, M1 ends (ramp M0 -> M1 is r0..r1) and M2 is fully in (ramp r1..r2). */
+export function mapTierRadiiM(metersPerPx: number, sharpRadiusM?: number): { r0: number; r1: number; r2: number } {
+  const r0 = Math.max(0, sharpRadiusM ?? MAP_TIERS.sharpRadiusPx * metersPerPx);
+  return { r0, r1: r0 * MAP_TIERS.m1Factor, r2: r0 * MAP_TIERS.m2Factor };
+}
+
+/**
+ * Tier and blur for a point `distanceM` meters from the player at zoom `metersPerPx`.
+ * `sharpRadiusM` defaults to a fixed screen radius at that zoom; the minimap passes its own.
+ * `blurPx` (screen px, never negative) grows linearly from 0 at the M0 edge to the M1 blur at the M1
+ * edge and on to the M2 blur at the M2 edge, then stays there.
+ */
+export function mapTierAt(distanceM: number, metersPerPx: number, sharpRadiusM?: number): { tier: MapTier; blurPx: number } {
+  const d = Math.abs(distanceM);
+  const { r0, r1, r2 } = mapTierRadiiM(metersPerPx, sharpRadiusM);
+  const tier: MapTier = d <= r0 ? 0 : d <= r1 ? 1 : 2;
+  let blurPx: number;
+  if (d <= r0) blurPx = 0;
+  else if (d <= r1) blurPx = (MAP_TIERS.m1.blurPx * (d - r0)) / (r1 - r0);
+  else if (d <= r2) blurPx = MAP_TIERS.m1.blurPx + ((MAP_TIERS.m2.blurPx - MAP_TIERS.m1.blurPx) * (d - r1)) / (r2 - r1);
+  else blurPx = MAP_TIERS.m2.blurPx;
+  return { tier, blurPx: Math.max(0, blurPx) };
+}

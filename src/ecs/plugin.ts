@@ -4,6 +4,7 @@ import type { Input } from '../engine/input.ts';
 import type { Physics } from '../engine/physics.ts';
 import type { View } from '../engine/view.ts';
 import type { PauseState } from './pause.ts';
+import type { Scope } from './scope.ts';
 
 export type Phase = 'input' | 'fixed' | 'update' | 'late' | 'render';
 
@@ -37,4 +38,10 @@ export interface GameContext {
   pause: PauseState;
   /** Plugins register systems during setup. */
   addSystem(system: System): void;
+  /**
+   * Teardown: owns a disposable (or cleanup function) and returns it. During `setup` it is backed by that
+   * plugin's own Scope; `game.stop()` / `game.disposePlugins()` dispose every plugin scope in reverse
+   * registration order. Plugins that never call it behave as before.
+   */
+  own: Scope['own'];
 }

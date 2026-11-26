@@ -37,6 +37,8 @@ export const PARAM_DOCS: Readonly<Record<string, ParamDoc>> = {
   'procedural.airport.radius': { min: 200, max: 2500, unit: 'm', desc: 'Search radius around the airport hint.' },
   'procedural.airport.runway_length': { min: 600, max: 2400, unit: 'm', desc: 'Runway length.' },
   'procedural.airport.runway_spacing': { min: 100, max: 600, unit: 'm', desc: 'Distance between the two parallel runways.' },
+  'procedural.airport.grade_slope_max': { min: 0, max: 1, desc: 'Steepest earth embankment around the airfield (rise per run; 0.35 = about 1:3). The ground is cut into the hill on the high side and filled on the low side; the ramp lengthens with the height difference. 0 = the old fixed 150 m blend (cliffs).' },
+  'procedural.airport.grade_reach_max': { min: 150, max: 1500, unit: 'm', desc: 'Farthest the airfield embankments reach from its edge; beyond it the natural ground is untouched.' },
   'procedural.airport.distance_weight': { min: 0, max: 1, desc: 'Penalty per metre of distance from the hint when scoring a site.' },
   'procedural.suitability.max_slope': { min: 0.05, max: 0.6, unit: 'm/m', desc: 'Slope at which a cell stops being buildable.' },
   'procedural.towns.road_discount': { min: 0.05, max: 1, desc: 'Growth step-cost multiplier near a main road; lower hugs roads more.' },
@@ -57,6 +59,16 @@ export const PARAM_DOCS: Readonly<Record<string, ParamDoc>> = {
   'procedural.districts.airport_core_gap': { min: 0, max: 3000, unit: 'm', desc: 'Dense core (density >= 0.5) must stay this far from the airfield.' },
   'procedural.districts.items[*].sigma': { min: 50, max: 3000, unit: 'm', desc: 'Reach of this district influence.' },
   'procedural.districts.items[*].weight': { min: -1, max: 1, desc: 'Strength of this district; negative pushes density away.' },
+  'procedural.landmarks.arch-bridge.route': { desc: 'Id of the road or railroad (procedural.roads.routes) whose crossing of the canal the arch bridge sits on. The bridge follows that crossing when the road or canal moves.' },
+  'procedural.landmarks.arch-bridge.tolerance': { min: 5, max: 200, unit: 'm', desc: 'How far the arch bridge may sit from the generated crossing; the guard bridge-landmarks-on-crossing refuses an edit that moves it further.' },
+  'procedural.trails[*].from': { desc: 'Where the trail starts. Only airport-terminal (the landside of the generated passenger terminal) is supported.' },
+  'procedural.trails[*].to.highest_within': { min: 200, max: 3000, unit: 'm', desc: 'Viewpoint rule: the highest dry, unbuilt cell within this distance of the airfield (and inside the Act 1 rect). Never a coordinate.' },
+  'procedural.trails[*].to.margin': { min: 0, max: 600, unit: 'm', desc: 'The viewpoint stays this far inside the Act 1 rect.' },
+  'procedural.trails[*].to.min_distance': { min: 0, max: 3000, unit: 'm', desc: 'The viewpoint is at least this far (straight line) from the start.' },
+  'procedural.trails[*].width': { min: 0.5, max: 4, unit: 'm', desc: 'Footpath width; a trail is not drivable.' },
+  'procedural.trails[*].max_grade': { min: 0.05, max: 0.8, desc: 'Steepest edge of the trail (rise per run; 0.30 = about 1:3.3). Steeper than a road may be. Cells above it are refused; if no route exists the guard trail-connected-and-grade fires.' },
+  'procedural.trails[*].min_length': { min: 100, max: 5000, unit: 'm', desc: 'Shortest routed trail length the guard accepts.' },
+  'procedural.trails[*].max_length': { min: 100, max: 8000, unit: 'm', desc: 'Longest routed trail length; a viewpoint that needs more is skipped for the next highest candidate.' },
   'procedural.transit.lines[*].station_spacing': { min: 200, max: 3000, unit: 'm', desc: 'Target distance between stations along a line.' },
 };
 
@@ -67,6 +79,7 @@ export const docFor = (path: string): ParamDoc | undefined => PARAM_DOCS[norm(pa
 export function rangeProblems(path: string, value: Json): string[] {
   const d = docFor(path);
   if (!d) return [];
+  if (typeof value === 'string' && d.min === undefined && d.max === undefined) return []; // a documented id, nothing to bound
   if (typeof value !== 'number' || !Number.isFinite(value)) return [`${path}: expected a number${d.unit ? ` (${d.unit})` : ''}`];
   const out: string[] = [];
   if (d.integer && !Number.isInteger(value)) out.push(`${path}: expected an integer`);

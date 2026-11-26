@@ -3,7 +3,7 @@ import { districtLabelPoint } from '../world/spec.ts';
 import type { Rect } from '../world/geometry.ts';
 import type { Vec2 } from '../world/vec.ts';
 import type { MapView, Viewport } from '../sim/map-view.ts';
-import { niceScaleLength, placeLabels, worldToScreen } from '../sim/map-view.ts';
+import { mapTierRadiiM, niceScaleLength, placeLabels, worldToScreen } from '../sim/map-view.ts';
 import { headingToMinimapAngle } from '../sim/minimap.ts';
 import { markerColor } from '../engine/meshes.ts';
 import type { BaseImage } from './map-base.ts';
@@ -64,6 +64,8 @@ export interface DetailLayer {
   metersPerPx: number;
   /** Whole-isthmus land cover / relief / water image (transparent sea), drawn over the plain land fill. */
   base?: BaseImage;
+  /** M2: the base downsampled and blurred once; drawn under `base` so the far ground is soft and cheap. */
+  far?: BaseImage;
 }
 
 export interface WorldMapFrame {
@@ -98,6 +100,46 @@ function haloText(g: Ctx, s: string, x: number, y: number, fill: string, halo: s
   g.strokeText(s, x, y);
   g.fillStyle = fill;
   g.fillText(s, x, y);
+}
+
+let scratch: HTMLCanvasElement | undefined;
+/** Frees the compositing buffer of the fades (called when the map closes). */
+export function disposeMapScratch(): void {
+  if (scratch) scratch.width = scratch.height = 0;
+  scratch = undefined;
+}
+
+/**
+ * Draws with `paint` into a buffer, fades it to transparent between `rInner` and `rOuter` (screen px
+ * from `center`), then composites it over `g`. Runs on redraw only (the map redraws on demand).
+ */
+function drawFaded(g: Ctx, center: Vec2, rInner: number, rOuter: number, paint: (s: Ctx) => void): void {
+  const main = g.canvas;
+  scratch ??= document.createElement('canvas');
+  if (scratch.width !== main.width || scratch.height !== main.height) {
+    scratch.width = main.width;
+    scratch.height = main.height;
+  }
+  const s = scratch.getContext('2d');
+  if (!s) return;
+  const m = g.getTransform();
+  s.setTransform(1, 0, 0, 1, 0, 0);
+  s.clearRect(0, 0, scratch.width, scratch.height);
+  s.setTransform(m);
+  s.save();
+  paint(s);
+  s.restore();
+  s.globalCompositeOperation = 'destination-in';
+  const fade = s.createRadialGradient(center.x, center.y, Math.min(rInner, rOuter - 1), center.x, center.y, rOuter);
+  fade.addColorStop(0, '#000');
+  fade.addColorStop(1, 'rgba(0,0,0,0)');
+  s.fillStyle = fade;
+  s.fillRect(-1e4, -1e4, 2e4, 2e4);
+  s.globalCompositeOperation = 'source-over';
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.drawImage(scratch, 0, 0);
+  g.restore();
 }
 
 let hatch: CanvasPattern | null | undefined;
@@ -219,13 +261,23 @@ export function drawWorldMap(g: Ctx, frame: WorldMapFrame, data: WorldData, deta
   landPath();
   g.fillStyle = C.land;
   g.fill();
-  if (detail.base) {
-    const { canvas, frame } = detail.base;
+  // Map-view LOD (doc 8.5): M2 everywhere, M1 faded out between r1 and r2, M0 (below) faded out
+  // between r0 and r1, all around the player (view center when there is none). Radii in screen px.
+  const radii = mapTierRadiiM(mpp);
+  const focus = player ? toS(player.p) : { x: vp.w / 2, y: vp.h / 2 };
+  const drawBase = (target: Ctx, img: BaseImage): void => {
+    const { canvas, frame } = img;
     const o = toS({ x: frame.minX, y: frame.maxY });
     const kb = frame.metersPerPx / mpp;
-    g.imageSmoothingEnabled = true;
-    g.imageSmoothingQuality = 'high';
-    g.drawImage(canvas, o.x, o.y, canvas.width * kb, canvas.height * kb);
+    target.imageSmoothingEnabled = true;
+    target.imageSmoothingQuality = 'high';
+    target.drawImage(canvas, o.x, o.y, canvas.width * kb, canvas.height * kb);
+  };
+  if (detail.far) drawBase(g, detail.far);
+  if (detail.base) {
+    const base = detail.base;
+    if (detail.far) drawFaded(g, focus, radii.r1 / mpp, radii.r2 / mpp, (s) => drawBase(s, base));
+    else drawBase(g, base);
   }
   const origin = toS({ x: 0, y: 0 });
   const pattern = hatchPattern(g);
@@ -261,14 +313,25 @@ export function drawWorldMap(g: Ctx, frame: WorldMapFrame, data: WorldData, deta
   const se = toS({ x: r.maxX, y: r.minY });
   const k = detail.metersPerPx / mpp; // screen px per layer px
   const lo = detail.layer.toLayer({ x: r.minX, y: r.maxY });
+  const drawDetail = (target: Ctx): void => {
+    target.beginPath();
+    target.rect(nw.x, nw.y, se.x - nw.x, se.y - nw.y);
+    target.clip();
+    target.imageSmoothingEnabled = true;
+    target.imageSmoothingQuality = 'high';
+    target.drawImage(detail.layer.canvas, nw.x - lo.x * k, nw.y - lo.y * k, detail.layer.canvas.width * k, detail.layer.canvas.height * k);
+  };
+  if (detail.far) drawFaded(g, focus, radii.r0 / mpp, radii.r1 / mpp, drawDetail);
+  else {
+    g.save();
+    drawDetail(g);
+    g.restore();
+  }
+  // The detail covered the shallows inside the rect: redraw them there, on the sea side only.
   g.save();
   g.beginPath();
   g.rect(nw.x, nw.y, se.x - nw.x, se.y - nw.y);
   g.clip();
-  g.imageSmoothingEnabled = true;
-  g.imageSmoothingQuality = 'high';
-  g.drawImage(detail.layer.canvas, nw.x - lo.x * k, nw.y - lo.y * k, detail.layer.canvas.width * k, detail.layer.canvas.height * k);
-  // The detail covered the shallows inside the rect: redraw them there, on the sea side only.
   g.beginPath();
   g.rect(0, 0, vp.w, vp.h);
   for (const s of landShapes) tracePath(g, s, toS, true);

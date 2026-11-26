@@ -72,6 +72,8 @@ export const cameraSettings: GamePlugin = {
     };
     document.addEventListener('click', onClick);
     document.addEventListener('pointerlockchange', onLockChange);
+    ctx.own(() => document.removeEventListener('click', onClick));
+    ctx.own(() => document.removeEventListener('pointerlockchange', onLockChange));
 
     let vWasDown = false;
     ctx.addSystem({

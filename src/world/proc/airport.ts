@@ -20,6 +20,13 @@ export interface AirportParams {
   readonly distanceWeight: number;
   /** Score penalty (m) for a field made entirely of river cells; scaled by the river share. */
   readonly culvertPenalty: number;
+  /**
+   * Steepest embankment around the field (rise/run). 0 = legacy: a fixed 150 m smoothstep blend, which leaves
+   * cliffs where the ground is steep.
+   */
+  readonly gradeSlopeMax: number;
+  /** Farthest the embankments reach from the field edge (m). */
+  readonly gradeReachMax: number;
   /** Where the airport is reached from (the city): the terminal sits on that side. */
   readonly towards: Vec2;
   /** Allowed runway headings, degrees clockwise from north (Tocumen's runways are ~29°). */
@@ -163,5 +170,80 @@ export function levelAirport(height: FieldGrid, a: AirportResult, blend: number)
       const i = gy * height.w + gx;
       height.data[i] = height.data[i]! + (a.level - height.data[i]!) * wgt;
     }
+  }
+}
+
+/** Distance (m) from a point to the airfield rectangle; 0 inside it. */
+export function fieldDistance(a: AirportResult, px: number, py: number): number {
+  const halfL = Math.hypot(a.field[1]!.x - a.field[0]!.x, a.field[1]!.y - a.field[0]!.y) / 2;
+  const halfW = Math.hypot(a.field[3]!.x - a.field[0]!.x, a.field[3]!.y - a.field[0]!.y) / 2;
+  const x = px - a.centre.x;
+  const y = py - a.centre.y;
+  const u = Math.abs(x * a.dir.x + y * a.dir.y) - halfL;
+  const v = Math.abs(-x * a.dir.y + y * a.dir.x) - halfW;
+  // Euclidean distance to the rectangle (corners are round), which keeps the ramp slope true in every direction.
+  return Math.hypot(Math.max(u, 0), Math.max(v, 0));
+}
+
+/**
+ * Earth embankments (cut on the high side, fill on the low side), no walls or terraces. Inside the field the
+ * ground is exactly `a.level`. Outside it, at distance `d` from the edge, the ground is the natural ground limited to
+ * `level +- s*d` (the embankment) and then swept outwards from the field, nearest cells first, so that no cell
+ * differs from an already graded neighbour by more than `s` per metre: steep natural ground (cliffs) inside the
+ * reach becomes a ramp that meets the natural ground where it can, and the ramp lengthens with the height
+ * difference. The last quarter of `reach` fades the result back to the natural ground so nothing steps at the cap
+ * (the slope limit holds out to 75 % of `reach`; the fade is where a ramp that has not met the natural ground yet gives way to it).
+ * Pure and deterministic. `s` is `p.gradeSlopeMax` (> 0), `reach` is `p.gradeReachMax`.
+ */
+export function gradeAirport(height: FieldGrid, a: AirportResult, s: number, reach: number): void {
+  const { w, h, cell } = height;
+  const fade0 = reach * 0.75;
+  const dist = new Float64Array(w * h);
+  const ring: number[] = [];
+  const done = new Uint8Array(w * h);
+  /** Swept ground before the fade; the sweep reads this, never the faded result. */
+  const graded = new Float64Array(w * h);
+  for (let gy = 0; gy < h; gy++) {
+    for (let gx = 0; gx < w; gx++) {
+      const i = gy * w + gx;
+      const d = fieldDistance(a, (gx + 0.5) * cell, (gy + 0.5) * cell);
+      dist[i] = d;
+      if (d === 0) {
+        height.data[i] = a.level;
+        graded[i] = a.level;
+        done[i] = 1;
+      } else if (d < reach) ring.push(i);
+    }
+  }
+  ring.sort((p, q) => dist[p]! - dist[q]! || p - q);
+  for (const i of ring) {
+    const d = dist[i]!;
+    const nat = height.data[i]!;
+    const lim = s * d;
+    const g = a.level + Math.max(-lim, Math.min(lim, nat - a.level));
+    const x = i % w;
+    const y = (i - x) / w;
+    let lo = -Infinity;
+    let hi = Infinity;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (!done[j]) continue;
+        const run = s * cell * (dx && dy ? Math.SQRT2 : 1);
+        lo = Math.max(lo, graded[j]! - run);
+        hi = Math.min(hi, graded[j]! + run);
+      }
+    }
+    const swept = Math.max(lo, Math.min(hi, g));
+    done[i] = 1;
+    graded[i] = swept;
+    if (d > fade0) {
+      const t = (d - fade0) / (reach - fade0);
+      height.data[i] = nat + (swept - nat) * (1 - t * t * (3 - 2 * t));
+    } else height.data[i] = swept;
   }
 }

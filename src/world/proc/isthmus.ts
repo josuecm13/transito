@@ -11,7 +11,7 @@
  */
 import { AIRPORT_TERMINAL_STOP, type ProceduralSpec, type WorldSpec } from '../spec.ts';
 import type { Vec2 } from '../vec.ts';
-import { levelAirport, siteAirport, type AirportResult } from './airport.ts';
+import { gradeAirport, levelAirport, siteAirport, type AirportResult } from './airport.ts';
 import { classifyCover } from './cover.ts';
 import { growDistricts, type DistrictsResult } from './districts.ts';
 import { cellAt, distanceFrom, makeShape, mask, type FieldGrid, type MaskGrid } from './grid.ts';
@@ -24,6 +24,8 @@ import { growTowns, suitability, type GrowthResult, type TownSpec } from './sett
 import { routeTransit, type TransitResult } from './transit.ts';
 import { placeAct1, type Act1Placement } from './act1.ts';
 import { placeLandmarks, type PlacedLandmark } from './landmarks.ts';
+import { routeTrails, type TrailResult } from './trails.ts';
+import { act1Rect } from './game-spec.ts';
 import { extractRivers, routeCanal, type CanalResult, type RiverSegment } from './water.ts';
 
 export interface Isthmus {
@@ -44,6 +46,8 @@ export interface Isthmus {
   readonly act1: Act1Placement;
   /** Landmarks placed by rule (procedural.landmarks), in spec order. */
   readonly landmarks: readonly PlacedLandmark[];
+  /** Hiking trails (procedural.trails), routed after everything else; empty when none are specified. */
+  readonly trails: readonly TrailResult[];
   readonly report: readonly string[];
 }
 
@@ -138,7 +142,8 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number; config?:
   const airport = siteAirport(height, relief.land, water, riverWide, P.airport);
   const rivers = clipOutside(allRivers, airport.field);
   const riverMask = strokeMask(relief.land, rivers.map((r) => ({ points: r.points, width: r.width })));
-  levelAirport(height, airport, 150);
+  if (P.airport.gradeSlopeMax > 0) gradeAirport(height, airport, P.airport.gradeSlopeMax, P.airport.gradeReachMax);
+  else levelAirport(height, airport, 150);
   for (let i = 0; i < height.data.length; i++) if (canal.channel.data[i] && !lake.lake.data[i]) height.data[i] = Math.min(height.data[i]!, lake.level - P.canal.depth);
   report.push(`airport at (${airport.centre.x.toFixed(0)}, ${airport.centre.y.toFixed(0)}), heading ${((Math.atan2(airport.dir.x, airport.dir.y) * 180) / Math.PI).toFixed(0)}°, spread ${airport.spread.toFixed(1)} m`);
 
@@ -281,9 +286,17 @@ export function generateIsthmus(spec: WorldSpec, opts: { cell?: number; config?:
   const clearOf = roads.paths
     .filter((r) => r.kind !== 'rail')
     .map((r) => ({ points: r.points, clear: (spec.streetProfiles[r.kind]?.width ?? 0) / 2 + sidewalkMax }));
-  const landmarks = placeLandmarks(P.landmarks, act1, airport, towns.owner, height, A.townIndex, clearOf);
+  const landmarks = placeLandmarks(P.landmarks, act1, airport, towns.owner, height, A.townIndex, clearOf, {
+    routes: roads.paths,
+    canal: canal.centreline,
+  });
   report.push(`landmarks: ${landmarks.map((l) => `${l.id} (${l.at.x.toFixed(0)}, ${l.at.y.toFixed(0)})`).join(', ')}`);
-  return { relief, height, lake, rivers, canal, airport, roads, towns, districts, cover, transit, act1, landmarks, report };
+  // Trails come last and read only earlier stages: nothing above depends on them.
+  const trails = P.trails.length
+    ? routeTrails({ height, land: relief.land, lake: lake.lake, wet, built: towns.owner, airport, rect: act1Rect({ act1 }, P.game.rectMargin, spec.bounds) }, P.trails)
+    : [];
+  if (trails.length) report.push(`trails: ${trails.map((t) => `${t.id} ${t.found ? `${t.length.toFixed(0)} m` : 'NO ROUTE'}`).join(', ')}`);
+  return { relief, height, lake, rivers, canal, airport, roads, towns, districts, cover, transit, act1, landmarks, trails, report };
 }
 
 const RIVER_BLUE: [number, number, number] = [52, 112, 166];
@@ -367,6 +380,12 @@ export function isthmusRenderInput(iso: Isthmus): RenderInput {
       return { x: q.x - (side * (b.y - a.y) * iso.act1.strip.halfWidth) / l, y: q.y + (side * (b.x - a.x) * iso.act1.strip.halfWidth) / l };
     });
     strokes.push({ points: edge.filter((_, k) => k % 6 === 0 || k === edge.length - 1), width: 6, color: ACT1, dash: [26, 26] });
+  }
+  // Hiking trails: a cream dashed line with a dark casing, readable over the jungle hillshade and unlike the solid tan roads.
+  for (const tr of iso.trails) {
+    if (tr.points.length < 2) continue;
+    strokes.push({ points: tr.points, width: 26, color: [40, 28, 12], dash: [40, 24] });
+    strokes.push({ points: tr.points, width: 16, color: [248, 232, 176], dash: [40, 24] });
   }
   for (const lm of iso.landmarks) dots.push({ at: lm.at, radius: 24, fill: ACT1, ring: [40, 24, 10], ringWidth: 6 });
   return {

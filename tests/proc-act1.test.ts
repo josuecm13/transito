@@ -86,7 +86,7 @@ const ownerAt = (q: { x: number; y: number }) => iso.towns.owner[cellAt(iso.town
 const dry = (q: { x: number; y: number }) => iso.relief.land.data[cellAt(iso.relief.land, q.x, q.y)] === 1 && iso.lake.lake.data[cellAt(iso.lake.lake, q.x, q.y)] !== 1;
 
 test('spec: landmark rules name existing landmarks; broken rules are rejected', () => {
-  assert.deepEqual(L.map((l) => l.id), ['tito-home', 'corridor-market', 'miguelito-hills', 'passenger-terminal', 'cargo-terminal']);
+  assert.deepEqual(L.map((l) => l.id), ['tito-home', 'corridor-market', 'miguelito-hills', 'passenger-terminal', 'cargo-terminal', 'arch-bridge']);
   assert.ok(L.every((l) => spec.landmarks.some((m) => m.id === l.id)));
   const broken = (from: RegExp, to: string, why: RegExp): void => {
     const text = yaml.replace(from, to);
@@ -97,6 +97,9 @@ test('spec: landmark rules name existing landmarks; broken rules are rejected', 
   broken(/{ airport: apron }/, '{ airport: hangar }', /cargo-terminal\.airport: expected terminal \| apron/);
   broken(/{ along: 170 }/, '{ along: 170, airport: apron }', /corridor-market: expected anchor/);
   broken(/{ steepest_within: 600 }/, '{ steepest_within: -5 }', /steepest_within: must be > 0/);
+  broken(/route: interamericana, feature: canal/, 'route: nope, feature: canal', /arch-bridge\.route: unknown route "nope"/);
+  broken(/feature: canal, tolerance: 30/, 'feature: river, tolerance: 30', /arch-bridge\.feature: expected canal/);
+  broken(/feature: canal, tolerance: 30/, 'feature: canal, tolerance: 30, extra: 1', /arch-bridge\.extra: unknown key/);
 });
 
 test("Act 1 landmarks sit on El Corredor's dry ground, inside the barrio and the strip", () => {

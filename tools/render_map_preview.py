@@ -547,7 +547,7 @@ PROC_SCHEMA = {
         "hint": "pt", "radius": "pos", "runway_length": "pos", "runway_spacing": "pos", "runway_width": "pos",
         "margin": "nonneg", "distance_weight": "nonneg", "heading_range": "span",
         "apron": {"length": "pos", "depth": "pos", "building": "pair"}, "edge_margin": "nonneg", "towards": "pt",
-        "culvert_penalty": "nonneg",
+        "culvert_penalty": "nonneg", "grade_slope_max": "nonneg", "grade_reach_max": "nonneg",
     },
     "roads": {
         "grade": {k: {"g0": "pos", "k": "pos", "max_grade": "pos"} for k in ("highway", "road", "rail")},
@@ -566,6 +566,7 @@ PROC_SCHEMA = {
                 "grade": {"metro": "pos", "rail": "pos"}, "bridge": "pos", "interchange_radius": "pos"},
     "act1": {"line": "str", "branch_to": "str", "anchor_at": "frac", "town": "str", "barrio_radius": "pos", "strip_half_width": "pos"},
     "?landmarks": "landmark_rules",
+    "?trails": "list",
     "game": {"district_cell": "pos", "rect_margin": "nonneg", "districts": "game_districts"},
 }
 ZONE = {"line": {"id": "str", "kind": "str", "points": "pts2", "width": "pos", "rate": "nonneg"},
@@ -793,8 +794,26 @@ def check_procedural(w):
                 errs.append(f"{p}.{lid}: unknown landmark (not in landmarks:)")
             if rule == "anchor":
                 continue
+            if isinstance(rule, dict):
+                # PyYAML (YAML 1.1) reads a bare `on` key as the boolean True; js-yaml keeps the string.
+                rule = {("on" if k is True else k): v for k, v in rule.items()}
+            if isinstance(rule, dict) and "on" in rule:
+                allowed = {"on", "route", "feature", "tolerance"}
+                for k in rule:
+                    if k not in allowed:
+                        errs.append(f"{p}.{lid}.{k}: unknown key (allowed: {', '.join(sorted(allowed))})")
+                if rule.get("on") != "crossing":
+                    errs.append(f"{p}.{lid}.on: expected crossing")
+                route_ids = {r.get("id") for r in ((pr.get("roads") or {}).get("routes") or []) if isinstance(r, dict)}
+                if rule.get("route") not in route_ids:
+                    errs.append(f"{p}.{lid}.route: unknown route {rule.get('route')!r} (not in procedural.roads.routes)")
+                if rule.get("feature") != "canal":
+                    errs.append(f"{p}.{lid}.feature: expected canal")
+                if not (is_num(rule.get("tolerance")) and rule["tolerance"] > 0):
+                    errs.append(f"{p}.{lid}.tolerance: must be > 0")
+                continue
             if not (isinstance(rule, dict) and len(rule) == 1 and next(iter(rule)) in ("along", "steepest_within", "airport")):
-                errs.append(f"{p}.{lid}: expected anchor, {{ along: m }}, {{ steepest_within: m }} or {{ airport: terminal | apron }}")
+                errs.append(f"{p}.{lid}: expected anchor, {{ along: m }}, {{ steepest_within: m }} or {{ airport: terminal | apron }} or {{ on: crossing, route, feature: canal, tolerance: m }}")
                 continue
             k, v = next(iter(rule.items()))
             if k == "airport":
@@ -802,6 +821,21 @@ def check_procedural(w):
                     errs.append(f"{p}.{lid}.airport: expected terminal | apron")
             elif not (is_num(v) and v > 0):
                 errs.append(f"{p}.{lid}.{k}: must be > 0")
+    tr = pr.get("trails")
+    if tr is not None:
+        p = "procedural.trails"
+        if not isinstance(tr, list):
+            errs.append(f"{p}: expected a list")
+            tr = []
+        trail_keys = {"id": "str", "from": "str", "to": {"highest_within": "pos", "margin": "nonneg", "min_distance": "nonneg"},
+                      "width": "pos", "max_grade": "pos", "min_length": "pos", "max_length": "pos"}
+        for i, t in enumerate(tr):
+            if section(t, trail_keys, f"{p}[{i}]"):
+                if isinstance(t.get("from"), str) and t["from"] != AIRPORT_TERMINAL_STOP:
+                    errs.append(f"{p}[{i}].from: expected {AIRPORT_TERMINAL_STOP} (the landside of the generated terminal)")
+                if is_num(t.get("min_length")) and is_num(t.get("max_length")) and not t["max_length"] >= t["min_length"]:
+                    errs.append(f"{p}[{i}].max_length: must be >= min_length")
+        unique(tr, p)
     return errs
 
 

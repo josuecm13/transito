@@ -1,4 +1,3 @@
-| 2026-11-25 | [Map Studio (#13)](runs/2026-11-25-map-studio.md) | map (#13) | cards 1–8 verdes (núcleo, CLI, guardas, distritos, UI, docs, benchmarks); abierto: política de extensión del mapa; sin commit |
 # Orchestrator run log — index
 
 One line per run, newest first. Each run has its own file in `runs/` (`<date>-<milestone>-<slug>.md`)
@@ -6,6 +5,8 @@ with goal, decisions, cards (agent/model/outcome/fix rounds), escalations and op
 
 | Date | Run | Milestone | Status |
 |---|---|---|---|
+| 2026-11-25 | [Arquitectura del mapa: sectores, portales, lugares turísticos](runs/2026-11-25-mapa-arquitectura-sectores.md) | map (#11, #12, #13) | cards 0-7 hechas y verificadas (baseline, sectores, aeropuerto con grading, mapa difuminado, arch-bridge por regla, sendero, slice por sector, contrato de teardown); 70/70 test files + typecheck + build verdes; validador Python rojo preexistente; sin commit; después del handoff: huecos de teardown cerrados (6b, 6c) y card 8 (Act 1 como sector #1, F4 recarga, heap plano tras 10 recargas); sin commit |
+| 2026-11-25 | [Map Studio (#13)](runs/2026-11-25-map-studio.md) | map (#13) | cards 1–8 verdes (núcleo, CLI, guardas, distritos, UI, docs, benchmarks); abierto: política de extensión del mapa; sin commit |
 | 2026-11-24 | [Pendientes: verificación visual, guardas, #12 comentarios, plan #11](runs/2026-11-24-pendientes-guardas-y-lod.md) | map (#12 comentarios, #11 plan) | guarda depthPrepass + smoothAvoiding por segmentos (verdes, sin commit); growTowns ya estaba arreglado; Línea 2 en open-questions #12; plan LOD #11 propuesto; punto de vista del carro no verificado |
 | 2026-11-24 | [Mapa: verificación, decisiones y plan de distritos](runs/2026-11-24-mapa-distritos-plan.md) | map (#12 2.2–2.5, #13 paso 7) | A+B en main (`63698a0`, push); C+D en main (`b3c44ba`); F1–F6 verdes sin commit (walk-graph arreglado; cobertura procedural en suelo y mapas; capas authored retiradas; istmo horneado en el build, arranque 5,1 s → 0,35 s) |
 | 2026-11-23 | [Mapa: composición A1+A2+B1](runs/2026-11-23-mapa-composicion.md) | map (#12 antes de 2.2, #13) | hecho: separación, aeropuerto aislado, El Corredor en cinta; sin commit |

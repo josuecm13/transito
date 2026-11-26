@@ -13,6 +13,7 @@ import type { RoadParams, RouteSpec } from './proc/roads.ts';
 import type { GrowthParams, SuitabilityParams } from './proc/settlements.ts';
 import type { TransitLineSpec, TransitParams } from './proc/transit.ts';
 import type { LandmarkRule } from './proc/landmarks.ts';
+import type { TrailParams } from './proc/trails.ts';
 import type { CanalParams, RiverParams } from './proc/water.ts';
 
 export type Range = readonly [number, number];
@@ -42,6 +43,8 @@ export interface Landmark {
   position: Vec2;
   kind: string;
   onWater: boolean;
+  /** Degrees in [0, 180) along the road, for landmarks placed on a generated crossing (procedural.landmarks). */
+  heading?: number;
   displayName?: string;
   triggerRadius?: number;
   notes?: string;
@@ -273,6 +276,8 @@ export interface ProceduralSpec {
   act1: ProcAct1;
   /** Landmarks the procedural map places by rule (procedural.landmarks; src/world/proc/landmarks.ts). */
   landmarks: { id: string; rule: LandmarkRule }[];
+  /** Hiking trails (procedural.trails; src/world/proc/trails.ts). Empty = none; the map is exactly the same without them. */
+  trails: TrailParams[];
   /** What the game loads from the procedural map (procedural.game; src/world/proc/game-spec.ts). */
   game: ProcGame;
 }
@@ -1463,7 +1468,7 @@ class ProcReader {
 function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; height: number }, landmarkIds: readonly string[], districtIds: readonly string[]): ProceduralSpec {
   const P = new ProcReader(r, bounds);
   const path = 'procedural';
-  const o = P.sec(raw, path, ['cell', 'relief', 'lake', 'rivers', 'canal', 'airport', 'roads', 'suitability', 'towns', 'cover', 'transit', 'act1', 'landmarks', 'game'], ['districts']) ?? {};
+  const o = P.sec(raw, path, ['cell', 'relief', 'lake', 'rivers', 'canal', 'airport', 'roads', 'suitability', 'towns', 'cover', 'transit', 'act1', 'landmarks', 'game'], ['districts', 'trails']) ?? {};
   const cell = o.cell === undefined ? NaN : P.num(o, 'cell', path, 'pos');
   const roads = parseProcRoads(P, o.roads, `${path}.roads`);
   const towns = parseProcTowns(P, o.towns, `${path}.towns`, roads.routes);
@@ -1482,7 +1487,8 @@ function parseProcedural(r: Reader, raw: unknown, bounds: { width: number; heigh
     transit,
     districts: parseProcDistricts(P, o.districts, `${path}.districts`, roads.routes),
     act1: parseProcAct1(P, o.act1, `${path}.act1`, transit.lines, towns.items),
-    landmarks: parseProcLandmarks(P, o.landmarks, `${path}.landmarks`, landmarkIds),
+    landmarks: parseProcLandmarks(P, o.landmarks, `${path}.landmarks`, landmarkIds, roads.routes.map((r) => r.id)),
+    trails: parseProcTrails(P, o.trails, `${path}.trails`),
     game: parseProcGame(P, o.game, `${path}.game`, towns.items, districtIds, bounds),
   };
 }
@@ -1505,9 +1511,34 @@ function parseProcGame(P: ProcReader, raw: unknown, path: string, towns: readonl
   return out;
 }
 
+function parseProcTrails(P: ProcReader, raw: unknown, path: string): TrailParams[] {
+  if (raw === undefined) return [];
+  const out = listOf(P.r, raw, path).flatMap((t, i): TrailParams[] => {
+    const p = `${path}[${i}]`;
+    const o = P.sec(t, p, ['id', 'from', 'to', 'width', 'max_grade', 'min_length', 'max_length']);
+    if (!o) return [];
+    const from = P.r.str(o, 'from', p);
+    if (from !== '' && from !== AIRPORT_TERMINAL_STOP) P.r.problems.push(`${p}.from: expected ${AIRPORT_TERMINAL_STOP} (the landside of the generated terminal)`);
+    const tp = `${p}.to`;
+    const to = P.sec(o.to, tp, ['highest_within', 'margin', 'min_distance']) ?? {};
+    const trail: TrailParams = {
+      id: P.r.str(o, 'id', p),
+      viewpoint: { highestWithin: P.num(to, 'highest_within', tp, 'pos'), margin: P.num(to, 'margin', tp, 'nonneg'), minDistance: P.num(to, 'min_distance', tp, 'nonneg') },
+      width: P.num(o, 'width', p, 'pos'),
+      maxGrade: P.num(o, 'max_grade', p, 'pos'),
+      minLength: P.num(o, 'min_length', p, 'pos'),
+      maxLength: P.num(o, 'max_length', p, 'pos'),
+    };
+    if (!(trail.maxLength >= trail.minLength)) P.r.problems.push(`${p}.max_length: must be >= min_length`);
+    return [trail];
+  });
+  P.unique(out.map((t) => t.id), path);
+  return out;
+}
+
 const AIRPORT_PARTS = ['terminal', 'apron'] as const;
 
-function parseProcLandmarks(P: ProcReader, raw: unknown, path: string, landmarkIds: readonly string[]): { id: string; rule: LandmarkRule }[] {
+function parseProcLandmarks(P: ProcReader, raw: unknown, path: string, landmarkIds: readonly string[], routeIds: readonly string[]): { id: string; rule: LandmarkRule }[] {
   const o = P.r.obj(raw, path);
   if (!o) return [];
   return Object.entries(o).flatMap(([id, v]): { id: string; rule: LandmarkRule }[] => {
@@ -1516,9 +1547,21 @@ function parseProcLandmarks(P: ProcReader, raw: unknown, path: string, landmarkI
     if (v === 'anchor') return [{ id, rule: { kind: 'anchor' } }];
     const m = P.r.obj(v, p);
     if (!m) return [];
+    if ('on' in m) {
+      // { on: crossing, route, feature: canal, tolerance }: where a generated route crosses a generated feature.
+      P.r.exact(m, ['on', 'route', 'feature', 'tolerance'], p);
+      if (m.on !== 'crossing') {
+        P.r.problems.push(`${p}.on: expected crossing`);
+        return [];
+      }
+      const route = P.r.str(m, 'route', p);
+      if (route !== '' && !routeIds.includes(route)) P.r.problems.push(`${p}.route: unknown route "${route}" (not in procedural.roads.routes)`);
+      if (m.feature !== 'canal') P.r.problems.push(`${p}.feature: expected canal`);
+      return [{ id, rule: { kind: 'crossing', route, feature: 'canal', tolerance: P.num(m, 'tolerance', p, 'pos') } }];
+    }
     const keys = Object.keys(m);
     if (keys.length !== 1 || !['along', 'steepest_within', 'airport'].includes(keys[0]!)) {
-      P.r.problems.push(`${p}: expected anchor, { along: m }, { steepest_within: m } or { airport: ${AIRPORT_PARTS.join(' | ')} }`);
+      P.r.problems.push(`${p}: expected anchor, { along: m }, { steepest_within: m }, { airport: ${AIRPORT_PARTS.join(' | ')} } or { on: crossing, route, feature: canal, tolerance: m }`);
       return [];
     }
     if (keys[0] === 'along') return [{ id, rule: { kind: 'along', metres: P.num(m, 'along', p, 'pos') } }];
@@ -1651,7 +1694,7 @@ function parseProcCanal(P: ProcReader, raw: unknown, path: string): CanalParams 
 }
 
 function parseProcAirport(P: ProcReader, raw: unknown, path: string): AirportParams {
-  const keys = ['hint', 'radius', 'runway_length', 'runway_spacing', 'runway_width', 'margin', 'distance_weight', 'heading_range', 'apron', 'edge_margin', 'towards', 'culvert_penalty'];
+  const keys = ['hint', 'radius', 'runway_length', 'runway_spacing', 'runway_width', 'margin', 'distance_weight', 'heading_range', 'apron', 'edge_margin', 'towards', 'culvert_penalty', 'grade_slope_max', 'grade_reach_max'];
   const o = P.sec(raw, path, keys) ?? {};
   const headingRange = P.span(o.heading_range, `${path}.heading_range`);
   if (!(headingRange[0] >= 0 && headingRange[1] <= 180)) P.r.problems.push(`${path}.heading_range: expected degrees within [0, 180]`);
@@ -1671,6 +1714,8 @@ function parseProcAirport(P: ProcReader, raw: unknown, path: string): AirportPar
     margin: P.num(o, 'margin', path, 'nonneg'),
     distanceWeight: P.num(o, 'distance_weight', path, 'nonneg'),
     culvertPenalty: P.num(o, 'culvert_penalty', path, 'nonneg'),
+    gradeSlopeMax: P.num(o, 'grade_slope_max', path, 'nonneg'),
+    gradeReachMax: P.num(o, 'grade_reach_max', path, 'nonneg'),
     towards: P.at(o.towards, `${path}.towards`),
     headingRange,
     apron: { length: P.num(apron, 'length', ap, 'pos'), depth: P.num(apron, 'depth', ap, 'pos'), building },

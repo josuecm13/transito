@@ -1,6 +1,6 @@
 import { Vector3 } from 'three/webgpu';
 import type { GamePlugin } from '../ecs/plugin.ts';
-import { CameraControlKey, DebugModeKey, LandCoverKey, ScreensKey, WorldDataKey, type DebugInfo, type DebugMode } from './keys.ts';
+import { CameraControlKey, DebugModeKey, LandCoverKey, ScreensKey, SectorHostKey, WorldDataKey, type DebugInfo, type DebugMode } from './keys.ts';
 import { SENSITIVITY_STEPS } from '../sim/camera-settings.ts';
 import {
   FLY,
@@ -17,6 +17,7 @@ import {
 } from '../sim/debug-fly.ts';
 import { coverAt } from '../world/cover.ts';
 import { sceneToSpec } from '../world/coords.ts';
+import { formatReloadLine } from '../ecs/sector-host.ts';
 import type { Vec2 } from '../world/vec.ts';
 
 /** Debug view tuning (dev tool, not world data): see the whole isthmus from the overview pose. */
@@ -115,7 +116,24 @@ export const debugMode: GamePlugin = {
       if (active && screens.top === undefined) notches -= Math.max(-3, Math.min(3, e.deltaY / 100));
     };
     window.addEventListener('wheel', onWheel, { passive: true });
+    ctx.own(() => window.removeEventListener('wheel', onWheel));
 
+    // F4 (debug only): free and rebuild the Act 1 sector, then log what stayed resident (doc 12, card 8).
+    const sector = ctx.services.get(SectorHostKey);
+    const reloadSector = (): void => {
+      sector.reload();
+      const mem = (performance as { memory?: { usedJSHeapSize: number } }).memory;
+      const info = (ctx.view.renderer as { info?: { memory?: { geometries?: number } } } | undefined)?.info;
+      console.log(
+        formatReloadLine(sector.generation - 1, {
+          children: scene.children.length,
+          geometries: info?.memory?.geometries,
+          colliders: ctx.physics.world.colliders?.len?.(),
+          heapMb: mem ? Math.round(mem.usedJSHeapSize / 1048576) : undefined,
+        }),
+      );
+    };
+    let f4Was = false;
     let f2Was = false;
     let oWas = false;
     ctx.addSystem({
@@ -125,6 +143,9 @@ export const debugMode: GamePlugin = {
         const f2 = c.input.isDown('F2');
         if (f2 && !f2Was) service.toggle();
         f2Was = f2;
+        const f4 = c.input.isDown('F4');
+        if (f4 && !f4Was && active) reloadSector();
+        f4Was = f4;
         const o = c.input.isDown('KeyO');
         if (o && !oWas && active && pose) {
           if (saved) {

@@ -36,7 +36,7 @@ function insideRing(q: Vec2, ring: readonly Vec2[]): boolean {
 }
 
 /** Bounding box of the act1 strip (± half-width) and barrio, plus `margin`, clamped to the map. */
-export function act1Rect(iso: Isthmus, margin: number, bounds: { width: number; height: number }): Rect {
+export function act1Rect(iso: Pick<Isthmus, 'act1'>, margin: number, bounds: { width: number; height: number }): Rect {
   const { strip, barrio } = iso.act1;
   let minX = barrio.centre.x - barrio.radius;
   let maxX = barrio.centre.x + barrio.radius;
@@ -117,12 +117,13 @@ export function gameSpecFromIsthmus(spec: WorldSpec, iso: Isthmus): GameSpec {
   };
   const inRect = (p: Vec2): boolean => p.x >= rect.minX && p.x <= rect.maxX && p.y >= rect.minY && p.y <= rect.maxY;
 
-  const placed = new Map(iso.landmarks.map((l) => [l.id, l.at] as const));
+  const placed = new Map(iso.landmarks.map((l) => [l.id, l] as const));
   const dropped: string[] = [];
   const landmarks: Landmark[] = [];
   for (const l of spec.landmarks) {
-    const at = placed.get(l.id);
-    if (at) landmarks.push({ ...l, position: { x: at.x, y: at.y }, district: districtAt(at) });
+    const pl = placed.get(l.id);
+    const at = pl?.at;
+    if (pl && at) landmarks.push({ ...l, position: { x: at.x, y: at.y }, district: districtAt(at), ...(pl.heading !== undefined ? { heading: pl.heading } : {}) });
     else if (inRect(l.position)) dropped.push(l.id);
     else landmarks.push(l);
   }

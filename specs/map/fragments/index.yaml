@@ -1,6 +1,20 @@
 # TRÁNSITO fragments registry — slug → engine import area. Written by tools/geo-fragments.mjs (import / register).
 # Fragments are small real-place squares (default 800 m, cap 2 km²) used as inspiration only.
 fragments:
+  casco-viejo:
+    import_area_id: "a0207c90-c866-4b16-8ee5-71f77af71e97"
+    place_name: null
+    center: [8.952, -79.534]
+    size_m: 800
+    bbox: [-79.5376416, 8.9484027, -79.5303584, 8.9555973]
+    note: "Casco Viejo block grid, colonial peninsula"
+  costa-del-este:
+    import_area_id: "efabd5bd-cbb6-4280-afa0-f225e3b4ab1d"
+    place_name: "Costa del Este"
+    center: [9.0132, -79.4681]
+    size_m: 800
+    bbox: [-79.4717423, 9.0096027, -79.4644577, 9.0167973]
+    note: "Costa del Este reclaimed formal grid with towers"
   juan-diaz:
     import_area_id: "b5253242-40b9-47eb-89bc-bb999b427a93"
     place_name: "Llano Bonito"
@@ -26,12 +40,26 @@ fragments:
     center: [9.0932, -79.4039]
     size_m: 800
     bbox: [-79.40753897729097, 9.089606755300036, -79.40026102270902, 9.096793244699963]
+  panama-viejo-ruins:
+    import_area_id: "b8572933-b18a-4220-953b-c894df338860"
+    place_name: "Parque Lefevre"
+    center: [9.0084, -79.4856]
+    size_m: 800
+    bbox: [-79.4892422, 9.0048027, -79.4819578, 9.0119973]
+    note: "Panama Viejo ruins on shore"
   pedregal:
     import_area_id: "2ae4b361-1174-4df6-a501-7ddf682f9173"
     place_name: "Pedregal"
     center: [9.0728, -79.4266]
     size_m: 800
     bbox: [-79.43023877016202, 9.069206755300037, -79.42296122983797, 9.076393244699965]
+  portobelo-bahia:
+    import_area_id: "f271ab87-9728-459e-9c4b-077f5b41e98c"
+    place_name: "Buenaventura"
+    center: [9.5538, -79.6549]
+    size_m: 800
+    bbox: [-79.6585479, 9.5502027, -79.6512521, 9.5573973]
+    note: "Portobelo coastal fort town"
   samaria:
     import_area_id: "d8aac12f-8cbc-4734-a66e-142e3297eed4"
     place_name: "Belisario Porras"

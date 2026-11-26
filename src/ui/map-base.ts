@@ -146,3 +146,38 @@ export function bakeIsthmusBase(data: WorldData, cover: LandCover, rect: Rect, m
   g.restore();
   return base;
 }
+
+/**
+ * M2: the base downsampled once to `metersPerPx` and blurred by `blurPx` (raster px). Built at load,
+ * never per frame. Without `ctx.filter` (old Safari) it is just the downsample.
+ */
+export function bakeFarTier(base: BaseImage, metersPerPx: number, blurPx: number): BaseImage {
+  const f = base.frame;
+  const frame: PixelFrame = {
+    minX: f.minX,
+    maxY: f.maxY,
+    metersPerPx,
+    w: Math.max(1, Math.ceil((f.w * f.metersPerPx) / metersPerPx)),
+    h: Math.max(1, Math.ceil((f.h * f.metersPerPx) / metersPerPx)),
+  };
+  const { canvas, g } = newCanvas(frame.w, frame.h);
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+  if ('filter' in g && blurPx > 0) g.filter = `blur(${blurPx}px)`;
+  g.drawImage(base.canvas, 0, 0, frame.w, frame.h);
+  g.filter = 'none';
+  return { canvas, frame };
+}
+
+/** Blurs `base` in place by `blurPx` (its own px), through one short-lived copy. */
+export function softenInPlace(base: BaseImage, blurPx: number): void {
+  const g = base.canvas.getContext('2d') as Ctx | null;
+  if (!g || !('filter' in g) || blurPx <= 0) return;
+  const { canvas: tmp, g: t } = newCanvas(base.canvas.width, base.canvas.height);
+  t.drawImage(base.canvas, 0, 0);
+  g.clearRect(0, 0, base.canvas.width, base.canvas.height);
+  g.filter = `blur(${blurPx}px)`;
+  g.drawImage(tmp, 0, 0);
+  g.filter = 'none';
+  tmp.width = tmp.height = 0;
+}

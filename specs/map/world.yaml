@@ -480,6 +480,12 @@ procedural:
     edge_margin: 200            # m inside the map frame
     towards: [2900, 1300]       # the terminal sits on this side (the city)
     culvert_penalty: 400        # m, score penalty for a field made entirely of river cells
+    # Earth embankments around the levelled field (cards 1, 12-sectors 8.4): cut into the hill on the high side, fill on
+    # the low side, no walls or terraces. Outside the field the ground is the field level plus or minus a ramp whose
+    # slope never exceeds `grade_slope_max` (rise/run), so the ramp lengthens with the height difference, capped by
+    # `grade_reach_max`. 0 = the legacy fixed 150 m smoothstep blend (it leaves cliffs where the ground is steep).
+    grade_slope_max: 0.35
+    grade_reach_max: 600        # m, farthest the grading reaches from the field edge
   # Main roads and the old railroad, by stops; geometry comes from slope-cost routing.
   # `airport-terminal` (reserved) is the generated airport's terminal.
   roads:
@@ -591,12 +597,32 @@ procedural:
   # Act 1 and airport landmarks on the generated map (#12 2.3), by rule, never by coordinates (README
   # "Procedural isthmus"). The x/y in landmarks: keep driving the current game until #12 2.5.
   #   anchor | { along: m } | { steepest_within: m } | { airport: terminal | apron }
+  #   | { on: crossing, route: <roads route id>, feature: canal, tolerance: m }   bridge: where the generated route
+  #   crosses the generated canal, on the road centreline (the deck), heading along the road; the guard
+  #   bridge-landmarks-on-crossing holds the landmark within `tolerance` m of that crossing
   landmarks:
     tito-home: anchor                          # Tito's family house: the barrio centre
     corridor-market: { along: 170 }            # Doña Mireya's shop: ~2 blocks down the strip towards the airport
     miguelito-hills: { steepest_within: 600 }  # the steepest El Corredor ground near the barrio
     passenger-terminal: { airport: terminal }
     cargo-terminal: { airport: apron }
+    arch-bridge: { on: crossing, route: interamericana, feature: canal, tolerance: 30 }   # the highway's bridge over the cut
+  # Hiking trails (card 3 of docs/map-reshape/03-technical/12-sectors-and-streaming.md, decision 3): footpaths, not
+  # roads (not drivable, steeper than a road may be). Spec + generated route only: nothing in the game reads it yet.
+  # `from` is the reserved stop airport-terminal (the landside of the passenger terminal). `to` is a RULE, never a
+  # coordinate: the highest dry, unbuilt cell within `highest_within` m of the airfield, inside the Act 1 rect shrunk
+  # by `margin` m and at least `min_distance` m (straight line) from `from`; if the highest cannot be reached within
+  # `max_length`, the next highest candidate (>= 150 m away) is tried. Cost 1 + 2 (grade / (max_grade / 2))^2 per
+  # metre; cells steeper than `max_grade` (rise/run), water, the airfield (20 m fence) and built cells are refused;
+  # the whole line stays inside the Act 1 rect. Guard trail-connected-and-grade.
+  trails:
+    - id: airport-ridge
+      from: airport-terminal
+      to: { highest_within: 900, margin: 120, min_distance: 700 }
+      width: 1.2                # m, footpath
+      max_grade: 0.30           # rise / run
+      min_length: 1000          # m, routed length
+      max_length: 1500          # m
   # What the game loads from the procedural map (#12 2.5): the active area is the Act 1 strip and barrio
   # (bounding box + rect_margin); districts come from the generated map on a district_cell grid
   # (majority of each cell: sea, lake, a town, the airfield, else wild), named by the districts: ids above.

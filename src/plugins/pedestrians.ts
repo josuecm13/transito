@@ -12,6 +12,7 @@ import { followerPose, reverseFollower, stepFollower } from '../sim/follower.ts'
 import { isBlocked } from '../sim/avoidance.ts';
 import { planPopulation } from '../sim/population.ts';
 import { PEDESTRIAN_BODY, centerY } from '../sim/body.ts';
+import { ownSceneAdditions } from '../engine/dispose-object.ts';
 
 /** Game-feel tuning only. Population numbers (budget, rings, speed) come from world.yaml. Body dimensions live in sim/body.ts. */
 const PEDS = {
@@ -56,15 +57,19 @@ export const pedestrians: GamePlugin = {
     let nextIndex = 0;
 
     // One instanced mesh for everybody.
-    const mesh = new InstancedMesh(
-      new CapsuleGeometry(PEDESTRIAN_BODY.radius, PEDESTRIAN_BODY.halfHeight * 2, 4, 8),
-      new MeshStandardMaterial({ roughness: 0.9 }),
-      cfg.budget,
-    );
-    mesh.count = 0;
-    mesh.frustumCulled = false;
-    mesh.setColorAt(0, new Color(PED_COLORS[0]));
-    ctx.view.scene.add(mesh);
+    let mesh!: InstancedMesh;
+    // Owned: scene.remove + geometry/material dispose on teardown.
+    ownSceneAdditions(ctx.view.scene, ctx.own, () => {
+      mesh = new InstancedMesh(
+        new CapsuleGeometry(PEDESTRIAN_BODY.radius, PEDESTRIAN_BODY.halfHeight * 2, 4, 8),
+        new MeshStandardMaterial({ roughness: 0.9 }),
+        cfg.budget,
+      );
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      mesh.setColorAt(0, new Color(PED_COLORS[0]));
+      ctx.view.scene.add(mesh);
+    });
 
     const focusSpec = (): Vec2 => {
       const f = focusQuery.first;
@@ -76,11 +81,21 @@ export const pedestrians: GamePlugin = {
       world.removeRigidBody(s.body); // also removes its colliders
       s.body = undefined;
     };
-    peds.onEntityRemoved.subscribe((e) => {
-      const s = states.get(e);
-      if (!s) return;
-      dropBody(s);
-      states.delete(e);
+    ctx.own(
+      peds.onEntityRemoved.subscribe((e) => {
+        const s = states.get(e);
+        if (!s) return;
+        dropBody(s);
+        states.delete(e);
+      }),
+    );
+    // Teardown (runs before the unsubscribe above): despawn every pedestrian, free any physics body left, and
+    // empty the pool so a second setup starts from nothing.
+    ctx.own(() => {
+      for (const e of [...peds]) ctx.ecs.remove(e);
+      for (const s of states.values()) dropBody(s);
+      states.clear();
+      nextIndex = 0;
     });
 
     const place = (e: Entity, s: PedState): void => {

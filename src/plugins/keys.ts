@@ -4,6 +4,7 @@ import type { CameraMode, CameraSettings } from '../sim/camera-settings.ts';
 import type { Screens } from '../ui/screens.ts';
 import type { LandCover } from '../world/cover.ts';
 import type { Vec2 } from '../world/vec.ts';
+import type { SectorHost } from '../ecs/sector-host.ts';
 
 /** Shared service keys. Neutral module: plugins import keys from here, never from each other. */
 export const WorldDataKey = createServiceKey<WorldData>('world-data');
@@ -59,3 +60,6 @@ export interface DebugMode {
   teleport(spec: Vec2): void;
 }
 export const DebugModeKey = createServiceKey<DebugMode>('debug-mode');
+
+/** Act 1 as sector #1 (doc 12, card 8): build, unload and reload its scene and physics content. Provided by world-view; world-physics joins it. */
+export const SectorHostKey = createServiceKey<SectorHost>('sector-host');

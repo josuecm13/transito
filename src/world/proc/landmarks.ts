@@ -10,6 +10,10 @@
  *   steepest_within: m      the steepest built cell of the act's town within that radius of the anchor
  *   airport: terminal       the generated terminal (landside)
  *   airport: apron          the centre of the generated apron (airside)
+ *   on: crossing            where the generated `route` crosses the generated canal (first crossing along the route): the
+ *                           point on the road centreline, i.e. on the deck, heading along the road. `tolerance` (m) is how far
+ *                           the landmark may sit from that crossing (guard `bridge-landmarks-on-crossing`). When the route no
+ *                           longer crosses the canal the landmark goes to their closest approach and the guard fires.
  */
 import type { Vec2 } from '../vec.ts';
 import type { Act1Placement } from './act1.ts';
@@ -23,11 +27,14 @@ export type LandmarkRule =
   | { readonly kind: 'anchor' }
   | { readonly kind: 'along'; readonly metres: number }
   | { readonly kind: 'steepest'; readonly within: number }
-  | { readonly kind: 'airport'; readonly part: 'terminal' | 'apron' };
+  | { readonly kind: 'airport'; readonly part: 'terminal' | 'apron' }
+  | { readonly kind: 'crossing'; readonly route: string; readonly feature: 'canal'; readonly tolerance: number };
 
 export interface PlacedLandmark {
   readonly id: string;
   readonly at: Vec2;
+  /** Degrees in [0, 180), along the road at the point (crossing rules only). */
+  readonly heading?: number;
   readonly rule: LandmarkRule;
 }
 
@@ -100,6 +107,58 @@ export function snapClearOfRoads(p: Vec2, owner: Uint8Array, g: FieldGrid, town:
   return null;
 }
 
+export interface Crossing {
+  readonly at: Vec2;
+  /** Degrees in [0, 180): direction of the route there. */
+  readonly heading: number;
+  /** False when the lines never cross: `at` is then the closest approach. */
+  readonly crosses: boolean;
+}
+
+/** Where `route` first crosses `feature` (both polylines), else their closest approach (a segment end to the other line). */
+export function routeCrossing(route: readonly Vec2[], feature: readonly Vec2[]): Crossing | null {
+  if (route.length < 2 || feature.length < 2) return null;
+  const heading = (a: Vec2, b: Vec2): number => (((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI) % 180 + 180) % 180;
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1]!;
+    const b = route[i]!;
+    let bestT = Infinity;
+    for (let j = 1; j < feature.length; j++) {
+      const c = feature[j - 1]!;
+      const d = feature[j]!;
+      const rx = b.x - a.x;
+      const ry = b.y - a.y;
+      const sx = d.x - c.x;
+      const sy = d.y - c.y;
+      const den = rx * sy - ry * sx;
+      if (Math.abs(den) < 1e-9) continue;
+      const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+      const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1 && t < bestT) bestT = t;
+    }
+    if (bestT < Infinity) return { at: { x: a.x + (b.x - a.x) * bestT, y: a.y + (b.y - a.y) * bestT }, heading: heading(a, b), crosses: true };
+  }
+  let best: Crossing | null = null;
+  let bestD = Infinity;
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1]!;
+    const b = route[i]!;
+    for (const q of feature) {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const l2 = dx * dx + dy * dy;
+      const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((q.x - a.x) * dx + (q.y - a.y) * dy) / l2));
+      const p = { x: a.x + dx * t, y: a.y + dy * t };
+      const d = Math.hypot(p.x - q.x, p.y - q.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { at: p, heading: heading(a, b), crosses: false };
+      }
+    }
+  }
+  return best;
+}
+
 /** Slope (m/m) at cell c by central differences. */
 function slopeAt(h: FieldGrid, c: number): number {
   const x = c % h.w;
@@ -116,9 +175,11 @@ export function placeLandmarks(
   height: FieldGrid,
   town: number,
   roads: readonly RoadClearance[] = [],
+  generated: { readonly routes: readonly { readonly id: string; readonly points: readonly Vec2[] }[]; readonly canal: readonly Vec2[] } = { routes: [], canal: [] },
 ): PlacedLandmark[] {
   return rules.map(({ id, rule }) => {
     let at: Vec2;
+    let heading: number | undefined;
     switch (rule.kind) {
       case 'anchor':
         // The barrio centre sits on the track, which runs along the highway: step off every carriageway.
@@ -157,6 +218,14 @@ export function placeLandmarks(
         at = best < 0 ? a : centreOf(height, best);
         break;
       }
+      case 'crossing': {
+        const route = generated.routes.find((r) => r.id === rule.route);
+        const x = route ? routeCrossing(route.points, generated.canal) : null;
+        if (!x) throw new Error(`landmark ${id}: route "${rule.route}" has no generated line to cross`);
+        at = x.at;
+        heading = x.heading;
+        break;
+      }
       case 'airport': {
         if (rule.part === 'terminal') at = airport.terminal;
         else {
@@ -166,6 +235,6 @@ export function placeLandmarks(
         break;
       }
     }
-    return { id, at, rule };
+    return { id, at, rule, ...(heading !== undefined ? { heading } : {}) };
   });
 }

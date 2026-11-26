@@ -43,6 +43,8 @@ export interface Hashes {
   towns: string;
   transit: string;
   districts: string;
+  /** Hiking trails; empty string when there are none (and then `all` is unchanged). */
+  trails: string;
   all: string;
 }
 
@@ -154,5 +156,10 @@ export function hashesOf(iso: Isthmus): Hashes {
   for (const v of Object.values(parts)) all.str(v);
   // The district field joins `all` only when districts exist, so a map without them keeps its fingerprint.
   if (iso.districts.ids.length) all.str(districts);
-  return { ...parts, districts, all: all.hex() };
+  const trailsH = new Hasher();
+  for (const t of iso.trails) trailsH.str(t.id), pts(trailsH, t.points);
+  const trails = iso.trails.length ? trailsH.hex() : '';
+  // Same for trails: they join `all` only when specified.
+  if (iso.trails.length) all.str(trails);
+  return { ...parts, districts, trails, all: all.hex() };
 }

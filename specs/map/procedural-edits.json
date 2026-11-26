@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "edits": [
+    {
+      "path": "procedural.airport.hint",
+      "value": [
+        5039,
+        2878
+      ]
+    },
+    {
+      "path": "procedural.roads.stops.city",
+      "value": [
+        3094,
+        1028
+      ]
+    },
+    {
+      "path": "procedural.roads.stops.colon",
+      "value": [
+        1882,
+        7550
+      ]
+    },
+    {
+      "path": "procedural.transit.stops.bay-east",
+      "value": [
+        3383,
+        1006
+      ]
+    },
+    {
+      "path": "procedural.transit.stops.casco",
+      "value": [
+        2062,
+        642
+      ]
+    },
+    {
+      "path": "procedural.transit.stops.colon",
+      "value": [
+        1547,
+        7231
+      ]
+    }
+  ]
+}

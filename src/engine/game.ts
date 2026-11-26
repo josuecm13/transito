@@ -4,6 +4,7 @@ import { orderPlugins } from '../ecs/schedule.ts';
 import type { GameContext, GamePlugin, Phase, System } from '../ecs/plugin.ts';
 import { createFrameGate } from '../sim/frame-gate.ts';
 import { createPauseState } from '../ecs/pause.ts';
+import { createPluginScopes, createScope } from '../ecs/scope.ts';
 import { createInput } from './input.ts';
 import { createPhysics } from './physics.ts';
 import { createView } from './view.ts';
@@ -15,6 +16,8 @@ const MAX_FRAME_DT = 0.1;
 export interface Game {
   ctx: GameContext;
   stop(): void;
+  /** Disposes every plugin's owned resources (reverse registration order). Idempotent. */
+  disposePlugins(): void;
 }
 
 export async function createGame(opts: {
@@ -26,6 +29,11 @@ export async function createGame(opts: {
   const input = createInput(window);
   const physics = await createPhysics();
   const view = await createView(canvas);
+  const scopes = createPluginScopes();
+  const rootScope = createScope();
+  // Teardown order: disposePlugins() runs scopes.disposeAll() (every plugin scope, so plugin cleanups that remove
+  // rigid bodies run first) and only then rootScope.dispose(), which frees the Rapier World.
+  rootScope.own(() => physics.free());
   const systems: Record<Phase, System[]> = { input: [], fixed: [], update: [], late: [], render: [] };
   const ctx: GameContext = {
     ecs: createEcs(),
@@ -36,11 +44,12 @@ export async function createGame(opts: {
     ui,
     pause: createPauseState(),
     addSystem: (s) => systems[s.phase].push(s),
+    own: rootScope.own,
   };
 
   for (const plugin of orderPlugins(plugins)) {
     try {
-      await plugin.setup(ctx);
+      await plugin.setup({ ...ctx, own: scopes.forPlugin(plugin.name).own });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const box = document.createElement('pre');
@@ -78,12 +87,27 @@ export async function createGame(opts: {
     view.render();
   });
 
+  const disposePlugins = (): void => {
+    console.log(`[teardown] live owned: ${scopes.live + rootScope.live}`);
+    try {
+      scopes.disposeAll();
+    } finally {
+      rootScope.dispose();
+      console.log(`[teardown] live owned: ${scopes.live + rootScope.live}`);
+    }
+  };
+
   return {
     ctx,
+    disposePlugins,
     stop() {
       view.renderer.setAnimationLoop(null);
-      input.dispose();
-      view.dispose();
+      try {
+        disposePlugins();
+      } finally {
+        input.dispose();
+        view.dispose();
+      }
     },
   };
 }

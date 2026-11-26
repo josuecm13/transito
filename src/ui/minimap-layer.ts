@@ -9,6 +9,7 @@ import { courtRect } from '../world/court-layout.ts';
 import { isCityBlock } from '../world/streets/city.ts';
 import type { LandCover } from '../world/cover.ts';
 import { bakeCover, paintWater } from './map-base.ts';
+import { MAP_TIERS } from '../sim/map-view.ts';
 
 export const MINIMAP_COLORS = {
   sea: '#1d4e7a',
@@ -188,4 +189,26 @@ export function renderStaticLayer(data: WorldData, metersPerPx: number, cover?: 
   );
 
   return { canvas, toLayer };
+}
+
+const shared = new WeakMap<WorldData, StaticLayer>();
+/**
+ * The M0 layer (1 m/px), built once per world and shared by the world map and the minimap, so the
+ * minimap no longer owns a second 1.5 m/px raster (doc 8.5).
+ */
+export function sharedStaticLayer(data: WorldData, cover?: LandCover): StaticLayer {
+  let layer = shared.get(data);
+  if (!layer) {
+    layer = renderStaticLayer(data, MAP_TIERS.m0.metersPerPx, cover);
+    shared.set(data, layer);
+  }
+  return layer;
+}
+
+/** Frees the backing store of the shared layer of `data` and forgets it (teardown; safe to call twice). */
+export function releaseSharedLayer(data: WorldData): void {
+  const layer = shared.get(data);
+  if (!layer) return;
+  layer.canvas.width = layer.canvas.height = 0;
+  shared.delete(data);
 }

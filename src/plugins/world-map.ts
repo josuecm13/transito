@@ -1,22 +1,22 @@
 import type { GamePlugin } from '../ecs/plugin.ts';
 import type { Screen } from '../ui/screens.ts';
 import type { MapView, Viewport, ZoomLimits } from '../sim/map-view.ts';
-import { clampCenter, clampZoom, fitBounds, pan, zoomAt } from '../sim/map-view.ts';
+import { clampCenter, clampZoom, fitBounds, MAP_TIERS, pan, zoomAt } from '../sim/map-view.ts';
 import { mapClickTarget } from '../sim/debug-fly.ts';
 import type { DetailLayer } from '../ui/world-map-canvas.ts';
-import { createTitoPulse, drawWorldMap, WORLD_MAP_TITLE } from '../ui/world-map-canvas.ts';
-import { bakeIsthmusBase } from '../ui/map-base.ts';
-import { renderStaticLayer } from '../ui/minimap-layer.ts';
+import { createTitoPulse, disposeMapScratch, drawWorldMap, WORLD_MAP_TITLE } from '../ui/world-map-canvas.ts';
+import { bakeFarTier, bakeIsthmusBase, softenInPlace } from '../ui/map-base.ts';
+import { releaseSharedLayer, sharedStaticLayer } from '../ui/minimap-layer.ts';
 import { sceneToSpec } from '../world/coords.ts';
 import type { Vec2 } from '../world/vec.ts';
 import { DebugModeKey, LandCoverKey, ScreensKey, WorldDataKey } from './keys.ts';
 
 /** UI tuning, not world data. */
-const DETAIL_M_PER_PX = 1;
+const DETAIL_M_PER_PX = MAP_TIERS.m0.metersPerPx;
 const MIN_M_PER_PX = 0.5;
 const FIT_PADDING_PX = 60;
-/** Meters per pixel of the whole-isthmus base image (land cover + hillshade + water), baked once. */
-const BASE_M_PER_PX = 6;
+/** Meters per pixel of the whole-isthmus base image (M1: land cover + hillshade + water), baked once. */
+const BASE_M_PER_PX = MAP_TIERS.m1.metersPerPx;
 /** Keyboard pan speed in screen px/s, so world speed scales with zoom. */
 const PAN_PX_PER_S = 650;
 const KEY_ZOOM_STEP = 2;
@@ -62,10 +62,14 @@ export const worldMap: GamePlugin = {
         const cover = ctx.services.get(LandCoverKey);
         const t0 = performance.now();
         const base = bakeIsthmusBase(data, cover, bounds, BASE_M_PER_PX);
+        softenInPlace(base, MAP_TIERS.m1.blurPx);
+        const far = bakeFarTier(base, MAP_TIERS.m2.metersPerPx, MAP_TIERS.m2.blurPx);
         const t1 = performance.now();
-        detail = { layer: renderStaticLayer(data, DETAIL_M_PER_PX, cover), metersPerPx: DETAIL_M_PER_PX, base };
+        detail = { layer: sharedStaticLayer(data, cover), metersPerPx: DETAIL_M_PER_PX, base, far };
         console.info(`world-map: base image ${base.frame.w}x${base.frame.h} baked in ${(t1 - t0).toFixed(0)} ms, detail layer in ${(performance.now() - t1).toFixed(0)} ms`);
       }
+      // The M0 layer is freed with the sector: re-fetch it (rebuilt on demand) on every open.
+      detail.layer = sharedStaticLayer(data, ctx.services.get(LandCoverKey));
       const layer = detail;
       // Every listener below uses this signal: one abort() removes them all.
       const listeners = new AbortController();
@@ -254,6 +258,8 @@ export const worldMap: GamePlugin = {
           zoomTarget = undefined;
           pulse.remove();
           host.remove();
+          canvas.width = canvas.height = 0;
+          disposeMapScratch();
         },
       };
     }
@@ -271,6 +277,19 @@ export const worldMap: GamePlugin = {
       },
       onKey: (e) => session?.onKey(e) ?? false,
     };
+
+    // Teardown: close the open session (aborts every listener, removes host + pulse, frees the fade scratch),
+    // then free the baked images and the shared M0 layer.
+    ctx.own(() => {
+      session?.close();
+      session = undefined;
+      if (detail) {
+        for (const img of [detail.base, detail.far]) if (img) img.canvas.width = img.canvas.height = 0;
+        detail = undefined;
+      }
+      releaseSharedLayer(data);
+      disposeMapScratch();
+    });
 
     screens.register(screen);
     screens.addMenuEntry({ label: WORLD_MAP_TITLE, order: 10, action: () => screens.open('world-map') });
