@@ -1,12 +1,15 @@
 # 03.08 — Layer 7: streets (local, alley; active-act area only)
 
+> 2026-11-26: El Corredor is built by the section generator (`src/world/streets/section/`), see `specs/map/README.md` "Section profiles"; the text below describes the earlier design where it differs. `informal.ts` and `streets-informal.test.ts` were deleted.
+
 ## Inputs
 Layer 6 collectors + main roads (fixed), relief, rivers (barriers), land cover (no streets on water/forest outside settlement
 masks), spec `street_styles` incl. optional `seed`, `land_use`, `reference`.
 
 ## Algorithm
-Exactly the existing generator (`src/world/streets/generate.ts`, `informal.ts`, `tensor-field.ts`, `seed.ts`, `planar-graph.ts`):
-formal = tensor-field streamlines; informal = Parish & Müller-style growth from seed rim; planar graph; faces -> blocks.
+The generator (`src/world/streets/generate.ts`, `tensor-field.ts`, `planar-graph.ts`, `section/`):
+formal = tensor-field streamlines; `section` = built from a section profile (earlier design: Parish & Müller-style growth
+from a seed rim, retired); planar graph; faces -> blocks.
 Changes: (1) district regions come from a polygon/label field instead of grid cells; (2) the `area` frame follows the
 outline, not the rect (`current-map.md` items 8-10); (3) growth reads the slope veto from layer 6.
 Seed: La Carpio fragment stays under Question 3.
@@ -19,7 +22,7 @@ Unchanged; `reference:` blocks stay.
 
 ## Pure test
 Existing `tests/streets-realism.test.ts` (bands with negative controls, 9/10 seeds in band as of the snapshot),
-`streets-informal.test.ts`, `streets-generate.test.ts`. Add: blocks tile the land mask (sum of block + street areas = land area, as
+`streets-generate.test.ts`, `section-generate.test.ts` (`streets-informal.test.ts` was retired with the grower). Add: blocks tile the land mask (sum of block + street areas = land area, as
 the snapshot shows 3,592,937 vs 3,592,940 m2).
 
 ## Metric band (frozen, `specs/map/street-metrics.yaml`)

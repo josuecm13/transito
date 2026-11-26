@@ -13,3 +13,5 @@ Compression check: a game hill of horizontal length L_game with slope p90 s need
 not the real height. Real relief is a sanity bound, not a target.
 
 Write findings to the director as: fragment slug, numbers, which rule they feed, caveat (data_quality).
+
+El Corredor fill rule: the `fill` fingerprint (`frontage_lots`) must come from a well-mapped San Miguelito or surrounding Panama square (>= 1000 buildings/km2 AND >= 8% footprint cover; tools/geo-fragments-lib.ts SPARSE_BUILDINGS_PER_KM2 / SPARSE_FOOTPRINT_COVER: a square is sparse if it fails EITHER). Scan candidate squares first; never copy numbers from a sparse fragment (torrijos-carter 14 buildings, juan-diaz 45, ...); never import Costa Rica (La Carpio is NOT used, director's decision 2026-11-26); if no square reaches the threshold, STOP and ask the director. Outputs feed the section profile (`specs/map/sections/<id>.json`); densities are stored clipped to the sample box.

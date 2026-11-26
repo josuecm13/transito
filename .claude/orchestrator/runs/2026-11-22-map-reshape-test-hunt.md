@@ -1,6 +1,6 @@
 # Run: map reshape — test hunt, frontage memory blow-up, memory-safe determinism checks (2026-11-22)
 
-Resumes `2026-11-22-map-reshape-handoff.md` (steps 1–2).
+Resumes `archive/2026-11-22-map-reshape-handoff.md` (steps 1–2).
 
 ## Goal
 

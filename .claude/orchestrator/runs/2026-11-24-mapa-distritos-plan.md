@@ -1,7 +1,7 @@
 # 2026-11-24: Mapa — verificación, decisiones y plan de distritos
 
 **Resume from:** F done (F1–F6 green, uncommitted; commit only when the director asks, never `package.json`/`src/main.ts`). Next: #11 items (F3 notes), T1 (tito-home on the highway, proposed issue), the open spec decision from F5 (remove the retired world.yaml sections?). walk-graph fixed (see F3 walk-graph below). F1+F2+F3 uncommitted; no commit until the director asks; `package.json`/`src/main.ts` never committed. Tito-home's note stays as it is (director).
-**Goal:** resume from `2026-11-24-next-session-handoff.md`: verify the state, settle the open decisions, propose
+**Goal:** resume from `archive/2026-11-24-next-session-handoff.md`: verify the state, settle the open decisions, propose
 the plan, and wait for the director's go. **Mode:** lean. **Issue:** #12 (2.2 → 2.5), #13 step 7.
 **Director instruction this session:** "don't ask me". The orchestrator took the decisions below with the most
 conservative option that the primary sources support. Nothing was implemented, committed or pushed.

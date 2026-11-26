@@ -2,7 +2,7 @@
 
 **Goal:** the procedural map reads as small capital → patchy El Corredor → green → isolated airport
 (#13 comment 1/3), before #12 2.2 places Act 1. **Mode:** lean. **Issue/milestone:** #12 (before 2.2), #13 layout.
-**Resume from:** `runs/2026-11-24-next-session-handoff.md` (decisions pending; nothing committed)
+**Resume from:** `runs/archive/2026-11-24-next-session-handoff.md` (decisions pending; nothing committed)
 
 ## Verified state
 See `2026-11-23-mapa-opciones.md` (same day). Re-checked: `main` = `origin/main` = `c376cc4`; fingerprint

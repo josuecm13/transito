@@ -28,6 +28,10 @@ How you work
 - Reuse the planar graph, face/block extraction, buildable area, frontage lots, city, walk graph and
   terrain grading. Do not touch them unless a measured defect forces it.
 - Deterministic: forked rng per phase, same number of draws regardless of rule outcomes.
+- Cross-engine: Chrome and Node return DIFFERENT results for Math.sin/cos/tan/atan/atan2/asin/acos/
+  exp/log/pow/cbrt (sqrt and hypot agree), which once made the browser build differ from Node. Use
+  `src/world/streets/section/dmath.ts`; `tests/section-platform.test.ts` perturbs Math by 1-2 ulp
+  and must keep passing. A new generator path uses dmath or proves it is robust.
 - Every guard you write is mutation-checked: break the thing with a python string replace (NOT
   `sed -i` on macOS), print the diff proving it applied, show red, restore, `cmp` against the saved
   copy, show green. A guard that has not failed has not counted.

@@ -1,5 +1,7 @@
 # 03.10 — Layer 9: buildings (active-act area only)
 
+> 2026-11-26: El Corredor's streets are built by the section generator (`src/world/streets/section/`), see `specs/map/README.md` "Section profiles"; the text below describes the earlier design where it differs. The buildings step itself is unchanged.
+
 ## Inputs
 Layer 8 buildable blocks, relief, `blockout:` per district, landmarks (clearance 18 m).
 

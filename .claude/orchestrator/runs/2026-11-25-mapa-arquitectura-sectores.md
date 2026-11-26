@@ -1,7 +1,7 @@
 # 2026-11-25: Arquitectura completa del mapa: sectores, puentes/túneles como portales, presupuesto PS2, lugares turísticos
 
 **Goal:** (1) arquitectura del mapa completo del istmo; (2) investigar la esencia de Ciudad de Panamá y sus lugares turísticos y mapearlos; (3) puentes/túneles que separan el mapa en sectores y liberan RAM al cargar el siguiente (mentalidad PS2, en navegador). **Mode:** full. **Issue/milestone:** map (#11 LOD, #12, #13)
-**Handoff prompt (para /clear):** `.claude/orchestrator/runs/2026-11-25-handoff-sectores.md`. **Resume from:** done through card 7 of doc 12 (director to review). Next: card 8 (Act 1 as sector #1: build + dispose), card 9 (worker + seamless swap), card 10 (Studio guards for sectors/portals), 11 (far-tier LOD), 12 (portal prototype, deferred); tickets pending approval.
+**Handoff prompt (para /clear):** `.claude/orchestrator/runs/archive/2026-11-25-handoff-sectores.md`. **Resume from:** done through card 7 of doc 12 (director to review). Next: card 8 (Act 1 as sector #1: build + dispose), card 9 (worker + seamless swap), card 10 (Studio guards for sectors/portals), 11 (far-tier LOD), 12 (portal prototype, deferred); tickets pending approval.
 
 ## Verified state
 - Árbol limpio salvo `specs/map/procedural-edits.json` sin seguimiento; HEAD `ec609f7` (Map Studio #13): confirmado.

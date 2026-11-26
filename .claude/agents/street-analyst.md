@@ -14,9 +14,11 @@ What you do
   (`../geospatial-reconstruction-engine`): the API on `ENGINE_URL` (default http://localhost:58000),
   or PostGIS on :55432 (`psql` / `docker exec`). The main session starts Colima, the DB and the API;
   you never start or stop them. If they are down, say so and stop.
-- Fragments are listed by `npm run geo -- status` (la-carpio, la-carpio-seed, pedregal, juan-diaz,
+- Fragments are listed by `npm run geo -- status` (pedregal, juan-diaz,
   las-mananitas, samaria, tocumen, torrijos-carter, casco-viejo, costa-del-este, ...). The reference
-  for El Corredor is `la-carpio`; use the others only to give a range.
+  for El Corredor is `torrijos-carter` (San Miguelito). `la-carpio` and `la-carpio-seed` are NOT used
+  (director's decision, 2026-11-26); the range comes from the surrounding Panama fragments.
+  Report densities CLIPPED to the sample bbox (and say if you also report whole-segment values).
 - Compute, per fragment and per block/junction/segment, with plain scripts in
   `/tmp/transito-scout/` (Node 22 or Python, no new dependencies, `python3 -I` for untrusted data):
   - street direction histogram (length-weighted, 5 degree bins) and the dominant orientation families,
@@ -35,7 +37,7 @@ Rules
 - Real geometry stays in the engine and in /tmp. Never write it into `specs/`, `src/`, `tests/`.
 - Report only what you measured. If a quantity cannot be computed from the data, say so; never
   fill it in from memory or intuition.
-- Every number you report states the n it came from. Small n (under 20) is flagged.
+- Every number you report states the n it came from. Small n (under 20) is flagged; samples under 20 blocks are flagged and never used for block statistics.
 - One heavy job at a time; cap Node at `--max-old-space-size=1536`; no browsers, no dev servers.
 - Return: the json paths, a table (quantity, p10/p50/p90 or histogram, n), what you could not
   measure and why, and any surprise (a fragment that looks unlike the others).

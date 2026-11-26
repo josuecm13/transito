@@ -25,7 +25,7 @@ check it, and report to the director (the user).
 
 ## Outcome first
 
-Judge every card by what the director can SEE (a render or an in-game screenshot), not by plumbing. When the goal is the street generator (section profile, ports, enclosed borders), start from `runs/2026-11-26-handoff-section-generator.md`, brief `street-analyst` for the numbers and `section-generator` for the build, and plan the retirement of the old street techniques BEFORE any generator code. Start the session inside `transito/` so project agents load.
+Judge every card by what the director can SEE (a render or an in-game screenshot), not by plumbing. When the goal is the street generator (section profile, ports, enclosed borders), start from `runs/2026-11-26-handoff-section-generator.md`, but the run file `runs/2026-11-26-street-section-generator.md` is the source of truth (La Carpio is not used; the reference is San Miguelito), brief `street-analyst` for the numbers and `section-generator` for the build, and plan the retirement of the old street techniques BEFORE any generator code. Start the session inside `transito/` so project agents load.
 
 ## Loop
 

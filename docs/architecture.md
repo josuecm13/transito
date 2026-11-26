@@ -73,8 +73,9 @@ world.yaml -> parseWorldSpec -> sliceWorld -> generateStreets -> deriveCity -> b
 `WorldData = { spec, slice, streets, city, buildings, walkGraph }`:
 
 - `streets: StreetNetwork` (`streets/generate.ts`): planar street graph (avenues fixed from the spec,
-  collectors / locals from tensor-field streamlines, alleys from organic growth, plus `frame` edges
-  along coast and borders) and its bounded faces, the blocks.
+  collectors / locals from tensor-field streamlines in formal districts or from a section profile in
+  `style: section` districts such as El Corredor, see `specs/map/README.md` "Section profiles"; plus
+  `frame` edges along coast and borders) and its bounded faces, the blocks.
 - `city: City` (`streets/city.ts`): per block buildable area, land use, parcels and buildings.
 - `buildings = city.buildings` (`CityBuilding` = blockout `Building` + parcel and block ids).
 - `walkGraph` (`walk-graph.ts`): sidewalks of every street with sidewalk (both sides, joined at
