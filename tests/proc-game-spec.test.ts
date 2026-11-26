@@ -7,6 +7,8 @@ import { parseWorldSpec, WorldSpecError } from '../src/world/spec.ts';
 import { generateIsthmus, type Isthmus } from '../src/world/proc/isthmus.ts';
 import { gameSpecFromIsthmus, type GameSpec } from '../src/world/proc/game-spec.ts';
 import { sliceWorld } from '../src/world/slice.ts';
+import { parseWorldWithEdits } from '../src/studio/saved.ts';
+import { buildWorldData } from '../src/world/world-data.ts';
 import { deriveCity, generateStreets } from '../src/world/streets/index.ts';
 
 const yaml = readFileSync(new URL('../specs/map/world.yaml', import.meta.url), 'utf8');
@@ -26,7 +28,7 @@ const code = (id: string): string => spec.districts.find((d) => d.id === id)!.co
 
 test('spec: procedural.game names a district for every source; broken blocks are rejected', () => {
   const G = spec.procedural.game;
-  assert.equal(G.districtCell, 200);
+  assert.equal(G.districtCell, 80);
   assert.equal(G.districts['el-corredor'], 'tito-corridor');
   assert.deepEqual(Object.keys(G.districts).sort(), ['airport', 'balboa', 'colon', 'el-corredor', 'gamboa', 'la-ciudad', 'lake', 'sea', 'wild']);
   const broken = (from: RegExp, to: string, why: RegExp): void => {
@@ -34,7 +36,7 @@ test('spec: procedural.game names a district for every source; broken blocks are
     assert.notEqual(text, yaml, `mutation ${from} must change the yaml`);
     assert.throws(() => parseWorldSpec(text), (e: unknown) => e instanceof WorldSpecError && why.test(e.message), String(from));
   };
-  broken(/district_cell: 200 /, 'district_cell: 300 ', /district_cell: 300 m must divide the bounds/);
+  broken(/district_cell: 80 /, 'district_cell: 300 ', /district_cell: 300 m must divide the bounds/);
   broken(/el-corredor: tito-corridor, gamboa/, 'el-corredor: barrio, gamboa', /districts\.el-corredor: unknown district "barrio"/);
   broken(/, gamboa: canal-central }/, ' }', /districts\.gamboa: missing/);
 });
@@ -55,14 +57,15 @@ test('active area: the Act 1 strip and barrio, spawning at the procedural tito-h
 
 test('grid: derived from the generated map on district_cell cells', () => {
   const g = game.spec;
-  assert.equal(g.bounds.cellSize, 200);
-  assert.equal(g.grid.length, spec.bounds.height / 200);
-  assert.ok(g.grid.every((r) => r.length === spec.bounds.width / 200));
+  const cs = spec.procedural.game.districtCell;
+  assert.equal(g.bounds.cellSize, cs);
+  assert.equal(g.grid.length, spec.bounds.height / cs);
+  assert.ok(g.grid.every((r) => r.length === spec.bounds.width / cs));
   assert.equal(codeAt(game, iso.act1.anchor.x, iso.act1.anchor.y), code('tito-corridor'));
   assert.equal(codeAt(game, iso.airport.centre.x, iso.airport.centre.y), code('airport'));
   assert.equal(codeAt(game, 3000, 50), code('sea'));
   // El Corredor's cells add up to about its generated area (the grid follows the town, not the 1 km authored cells).
-  const t = g.grid.flat().filter((c) => c === code('tito-corridor')).length * 0.04;
+  const t = g.grid.flat().filter((c) => c === code('tito-corridor')).length * ((cs * cs) / 1e6);
   const corridor = iso.towns.areasKm2[spec.procedural.act1.townIndex]!;
   assert.ok(Math.abs(t - corridor) < corridor * 0.5, `${t.toFixed(2)} km² of T cells vs ${corridor.toFixed(2)} km² built`);
 });
@@ -110,4 +113,33 @@ test('district labels: every map label lands on its own district of the derived 
   const kept = game.spec.districts.filter((d) => d.labelAt);
   assert.ok(kept.length >= 1, 'some authored label_at survives');
   for (const d of kept) assert.deepEqual(d.labelAt, spec.districts.find((a) => a.id === d.id)!.labelAt);
+});
+
+test('the walk graph of the real world is one piece: the derived district grid leaves no sidewalk islands in Act 1', () => {
+  // The game runs on the saved Studio edits (specs/map/procedural-edits.json): same isthmus as tests/sector-slice.test.ts.
+  const edited = parseWorldWithEdits(yaml, readFileSync(new URL('../specs/map/procedural-edits.json', import.meta.url), 'utf8'));
+  const w = buildWorldData(yaml, generateIsthmus(edited)).walkGraph;
+  const seen = new Array<boolean>(w.nodes.length).fill(false);
+  const sizes: number[] = [];
+  for (let s = 0; s < w.nodes.length; s++) {
+    if (seen[s]) continue;
+    seen[s] = true;
+    let n = 0;
+    const stack = [s];
+    while (stack.length) {
+      const u = stack.pop()!;
+      n++;
+      for (const e of w.adjacency[u]!) {
+        const ed = w.edges[e]!;
+        const v = ed.a === u ? ed.b : ed.a;
+        if (!seen[v]) {
+          seen[v] = true;
+          stack.push(v);
+        }
+      }
+    }
+    sizes.push(n);
+  }
+  assert.ok(w.nodes.length > 100, `${w.nodes.length} walk nodes`);
+  assert.equal(sizes.length, 1, `walk components (node counts): ${sizes.sort((a, b) => b - a).join(', ')}`);
 });

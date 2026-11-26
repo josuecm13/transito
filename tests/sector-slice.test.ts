@@ -97,6 +97,6 @@ test('(c) the corredor slice holds the Act 1 rect (saved edits) and buildWorldDa
   const b = buildWorldData(worldYaml, assembleIsthmus(slices, iso));
   const counts = (d: typeof a): number[] => [d.streets.graph.edges.length, d.buildings.length];
   console.log(`buildWorldData (full isthmus, no saved edits in this call): street edges ${counts(a)[0]}, buildings ${counts(a)[1]}; reassembled: ${counts(b)}`);
-  assert.deepEqual(counts(a), [516, 1200], 'game console baseline (2026-11-25): 516 street edges, 1200 buildings');
+  assert.deepEqual(counts(a), [645, 1253], 'game console baseline (district_cell 80, 2026-11-25): 645 street edges, 1253 buildings');
   assert.deepEqual(counts(b), counts(a));
 });
