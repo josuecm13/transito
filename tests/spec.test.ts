@@ -95,7 +95,7 @@ test('street_styles: the three active-area districts parse with their style and 
   assert.deepEqual(Object.keys(ss.districts).sort(), ['airport', 'costa-del-este', 'tito-corridor']);
 
   const corridor = ss.districts['tito-corridor']!;
-  assert.equal(corridor.style, 'informal');
+  assert.equal(corridor.style, 'section');
   assert.equal(corridor.reference[0]?.name, 'La Carpio');
   assert.equal(corridor.reference[0]?.importAreaId, '6320bab5-c7e1-436d-a7bd-c542ee355cb7');
   assert.equal(corridor.realismExemptReason, undefined);
@@ -129,7 +129,7 @@ const expectProblem = (broken: string, match: (p: string) => boolean) => {
 
 test('street_styles rejects an unknown style', () => {
   expectProblem(
-    yaml.replace(/^( {6}style:) informal$/m, '$1 grid'),
+    yaml.replace(/^( {6}style:) section$/m, '$1 grid'),
     (p) => p.startsWith('street_styles.districts.tito-corridor.style'),
   );
 });

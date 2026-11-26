@@ -5,7 +5,6 @@ export * from './tensor-field.ts';
 export * from './streamlines.ts';
 export * from './region.ts';
 export * from './generate.ts';
-export * from './informal.ts';
 export * from './measure.ts';
 export * from './poly.ts';
 export * from './buildable.ts';

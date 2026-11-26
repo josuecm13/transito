@@ -1,7 +1,7 @@
 /**
  * Street network generator (issue #7, S3): avenues (fixed) → frame → formal districts
- * (tensor-field streamlines) → informal districts (organic growth, informal.ts, S4) → cleanup →
- * blocks.
+ * (tensor-field streamlines) → cleanup → blocks. Districts with a
+ * section profile (`style: section`) are built by section/ instead.
  *
  * Pure and deterministic: same spec + seed → deep-equal output. Every random draw comes from a
  * fork of `createRng(seed)` labelled by district and pass, so districts and passes never shift
@@ -20,13 +20,13 @@
  * an end at the coast / district border / playable limit gets a frame connector so the block
  * there closes; an end at the active-area border lands on it.
  */
-import type { StreetProfile, StreetStyleDistrict, WorldSpec } from '../spec.ts';
+import type { SectionProfile, StreetProfile, StreetStyleDistrict, WorldSpec } from '../spec.ts';
 import { districtAt } from '../spec.ts';
 import type { WorldSlice } from '../slice.ts';
 import type { Vec2 } from '../vec.ts';
 import type { Rng } from '../rng.ts';
 import { createRng } from '../rng.ts';
-import { clipPolylineToRect } from '../geometry.ts';
+import { clipPolylineToRect, pointInPolygon, rectContains } from '../geometry.ts';
 import type { EdgeProps, GraphEdge, GraphSnapshot, StreetClass, Tolerances } from './planar-graph.ts';
 import { CLASS_RANK, PlanarGraph, projectOnSegment, segmentIntersection } from './planar-graph.ts';
 import type { Block } from './faces.ts';
@@ -36,8 +36,11 @@ import { alignSegments, createTensorField, sampleTensorField } from './tensor-fi
 import type { Family } from './streamlines.ts';
 import { arcLengths, enforceVertexGap, SampleIndex, simplify, slicePolyline, traceStreamline } from './streamlines.ts';
 import type { DistrictRegion, FrameSegment } from './region.ts';
-import { AVENUE_KINDS, buildFrame, buildFrameIndex, createDistrictRegion } from './region.ts';
-import { growOrganicDistrict } from './informal.ts';
+import { AVENUE_KINDS, buildFrame, buildFrameIndex, createDistrictRegion, districtBox } from './region.ts';
+import type { SectionInfo } from './section/section.ts';
+import { generateSection } from './section/section.ts';
+import { buildOutline } from './section/outline.ts';
+import { sectionParams } from './section/params.ts';
 
 /** Generator constants that are not spec data (the tuning knobs that ARE data live in world.yaml). */
 export interface GeneratorParams {
@@ -85,48 +88,6 @@ export interface GeneratorParams {
   culDeSacClearance: number;
   /** Seed jitter along the street, as a fraction of the separation. */
   seedJitter: number;
-  // Organic growth (informal districts, informal.ts). The spec knobs live in growth.*.
-  /** Largest turn (deg) of a continuing informal street at each segment. */
-  informalTurn: number;
-  /** Branch / seed heading = 90° ± this (deg). */
-  informalBranchTurn: number;
-  /** Largest bend (deg) allowed when an end snaps to a node / street within snap_radius. */
-  informalSnapTurn: number;
-  /** A new informal street may not run within this distance (m) of a near-parallel street. */
-  informalSeparation: number;
-  /** Streets within this angle (deg) count as parallel for informalSeparation. */
-  informalParallelAngle: number;
-  /** Queue delay of a branch (in segments) relative to the street it hangs from. */
-  informalBranchDelay: number;
-  /**
-   * A new informal junction may not form within this distance (m) of another junction: the end
-   * moves onto that junction when it can, else the proposal is dropped.
-   */
-  informalJunctionGap: number;
-  /** Chance that an informal street continues past a street it crosses (X junction). */
-  informalCrossThrough: number;
-  /** Chance that a free informal street end stops there (dead end) instead of continuing. */
-  informalStopProbability: number;
-  /** Chance that a local branch is a spur: 1..informalSpurSegments segments, may dead-end. */
-  informalSpurProbability: number;
-  informalSpurSegments: number;
-  /** Spur segment length = segment_length × this. */
-  informalSpurLengthRatio: number;
-  /** Coverage: allowed points farther than this (m) from every street get a proposal. */
-  informalCoverageGap: number;
-  informalCoveragePasses: number;
-  /** Infill: a face of the grown network larger than this (m²) gets a cross street (0 = off). */
-  informalInfillArea: number;
-  informalInfillPasses: number;
-  /** Hard cap on proposals per informal district (runtime bound). */
-  informalMaxProposals: number;
-  /** Alley segment length = segment_length × this; alleys grow 1..alleyMaxSegments segments. */
-  alleyLengthRatio: number;
-  alleyMaxSegments: number;
-  /** Shortest alley segment (m). */
-  alleyMinSegment: number;
-  /** Alley separation = informalSeparation × this. */
-  alleySeparationRatio: number;
 }
 
 export const DEFAULT_PARAMS: GeneratorParams = {
@@ -153,27 +114,6 @@ export const DEFAULT_PARAMS: GeneratorParams = {
   deadEndProbability: 0.15,
   culDeSacClearance: 3,
   seedJitter: 0.35,
-  informalTurn: 12,
-  informalBranchTurn: 12,
-  informalSnapTurn: 40,
-  informalSeparation: 40,
-  informalParallelAngle: 35,
-  informalBranchDelay: 3,
-  informalJunctionGap: 20,
-  informalCrossThrough: 0.1,
-  informalStopProbability: 0.35,
-  informalSpurProbability: 0.6,
-  informalSpurSegments: 2,
-  informalSpurLengthRatio: 0.5,
-  informalCoverageGap: 55,
-  informalCoveragePasses: 3,
-  informalInfillArea: 16000,
-  informalInfillPasses: 3,
-  informalMaxProposals: 40000,
-  alleyLengthRatio: 0.5,
-  alleyMaxSegments: 3,
-  alleyMinSegment: 8,
-  alleySeparationRatio: 0.5,
 };
 
 export interface StreetNetwork {
@@ -182,6 +122,8 @@ export interface StreetNetwork {
   graph: GraphSnapshot;
   /** Bounded faces with playable interior. */
   blocks: Block[];
+  /** Sections built from a profile (outline, ports): absent when no district uses one. */
+  sections?: SectionInfo[];
   stats: {
     connectors: number;
     prunedDangling: number;
@@ -194,10 +136,9 @@ export interface StreetNetwork {
   };
 }
 
-export type InformalStyle = Extract<StreetStyleDistrict, { style: 'informal' }>;
 export type FormalStyle = Extract<StreetStyleDistrict, { style: 'formal' }>;
 
-/** Everything a district generator needs; shared by the formal passes and the S4 grower. */
+/** Everything a district generator needs; used by the formal passes. */
 export interface DistrictContext {
   spec: WorldSpec;
   slice: WorldSlice;
@@ -218,24 +159,19 @@ export interface DistrictContext {
   connectToFrame(node: number, cls: Exclude<StreetClass, 'avenue'>): boolean;
 }
 
-export interface InformalContext extends DistrictContext {
-  style: InformalStyle;
-}
-
-/** S4 extension point: organic growth for `style: informal` districts. */
-export type InformalGrower = (ctx: InformalContext) => void;
-
-/** Default informal grower: organic growth (informal.ts, S4). */
-export const growInformalDistrict: InformalGrower = (ctx) => growOrganicDistrict(ctx);
-
 export interface GenerateOptions {
   /** Overrides street_styles.seed. */
   seed?: number;
-  informal?: InformalGrower;
   tolerances?: Partial<Tolerances>;
   params?: Partial<GeneratorParams>;
   /** Filled with phase timings (ms) when given. Not part of the (deterministic) result. */
   profile?: Record<string, number>;
+  /**
+   * Section profiles by id (loadSectionProfiles of world.yaml `section_profiles:`). A district named by one
+   * is built by the section generator (src/world/streets/section/) instead of its `street_styles` style;
+   * every other district takes the old path untouched.
+   */
+  profiles?: Record<string, SectionProfile>;
 }
 
 const now = (): number => globalThis.performance?.now() ?? Date.now();
@@ -266,7 +202,11 @@ export function generateStreets(spec: WorldSpec, slice: WorldSlice, options: Gen
     for (const piece of clipPolylineToRect(route.points, rect)) graph.addPolyline(piece, avenueProps(spec, route.id, route.kind, route.width));
   }
   // 2. Frame.
-  const frame: FrameSegment[] = buildFrame(spec, rect);
+  const sectionProfiles = Object.values(options.profiles ?? {})
+    .filter((pr) => spec.districts.some((d) => d.id === pr.district))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const sectionDistricts = new Set(sectionProfiles.map((pr) => pr.district));
+  const frame: FrameSegment[] = buildFrame(spec, rect, sectionDistricts);
   for (const f of frame) graph.addSegment(f.a, f.b, { cls: 'frame', width: 0, sidewalk: 0, fixed: false, frame: f.kind });
   const frameIndex = buildFrameIndex(frame, spec, rect);
   mark('avenues+frame');
@@ -274,25 +214,45 @@ export function generateStreets(spec: WorldSpec, slice: WorldSlice, options: Gen
   const root = createRng(seed);
   let connectors = 0;
   const districtIds = Object.keys(spec.streetStyles.districts).sort();
-  // 3. Formal districts first, then informal ones (so organic growth can join formal streets).
-  for (const phase of ['formal', 'informal'] as const) {
-    for (const id of districtIds) {
-      const style = spec.streetStyles.districts[id] as StreetStyleDistrict;
-      if (style.style !== phase) continue;
-      const region = createDistrictRegion(spec, slice, id, frameIndex);
-      if (!region) continue; // no cells inside the active area
-      const ctx = makeContext(spec, slice, graph, region, root.fork(`streets:${id}`), params, () => connectors++);
-      if (style.style === 'formal') generateFormal(ctx, style);
-      else (options.informal ?? growInformalDistrict)({ ...ctx, style });
-      mark(`district:${id}`);
-    }
+  // 3a. Sections (profile-driven districts): boundary road along the smooth outline, inner network from the profile.
+  const sections: SectionInfo[] = [];
+  for (const profile of sectionProfiles) {
+    const box = districtBox(spec, profile.district, rect);
+    if (!box) continue;
+    const sp = sectionParams(profile);
+    const outline = buildOutline({
+      inside: (p) => rectContains(rect, p) && districtAt(spec, p)?.id === profile.district && slice.isPlayableLand(p),
+      box,
+      smoothing: spec.bounds.cellSize,
+      irregularity: sp.irregularityP90,
+      maxChord: sp.segment.p90,
+    });
+    if (!outline) continue;
+    sections.push(generateSection({ profile, graph, outline, hierarchy: spec.streetStyles.hierarchy, rng: root.fork(`section:${profile.id}`) }));
+    mark(`section:${profile.id}`);
+  }
+  // A point of a section district belongs to it only inside the smooth outline (grid cells outside it are wild).
+  const districtOf = (p: Vec2): string | undefined => {
+    for (const s of sections) if (pointInPolygon(p, s.outline)) return s.district;
+    const d = districtAt(spec, p)?.id;
+    return d !== undefined && sectionDistricts.has(d) ? undefined : d;
+  };
+  // 3b. Formal districts (every `style: section` district was built in 3a).
+  for (const id of districtIds) {
+    const style = spec.streetStyles.districts[id] as StreetStyleDistrict;
+    if (style.style !== 'formal' || sectionDistricts.has(id)) continue;
+    const region = createDistrictRegion(spec, slice, id, frameIndex);
+    if (!region) continue; // no cells inside the active area
+    const ctx = makeContext(spec, slice, graph, region, root.fork(`streets:${id}`), params, () => connectors++);
+    generateFormal(ctx, style);
+    mark(`district:${id}`);
   }
 
   // 4. Cleanup.
   graph.repair();
   graph.collapseShortEdges();
   const prunedDangling = graph.pruneDangling(params.danglingMin);
-  const streetOk = streetPlacementCheck(spec, slice);
+  const streetOk = streetPlacementCheck(spec, slice, districtOf);
   let closedDeadEnds = closeTouchingDeadEnds(graph, streetOk, params);
   const linkedIslands = linkWalkIslands(graph, streetOk, params);
   const removedFloating = graph.removeFloatingStreets();
@@ -307,9 +267,9 @@ export function generateStreets(spec: WorldSpec, slice: WorldSlice, options: Gen
 
   // 5. Blocks.
   const snap = graph.snapshot();
-  const blocks = buildBlocks(snap, { isInside: slice.isPlayableLand, districtOf: (p) => districtAt(spec, p)?.id });
+  const blocks = buildBlocks(snap, { isInside: slice.isPlayableLand, districtOf });
   mark('faces');
-  return { seed, graph: snap, blocks, stats: { connectors, prunedDangling, closedDeadEnds, linkedIslands, removedFloating, shortEdgesLeft } };
+  return { seed, graph: snap, blocks, ...(sections.length > 0 ? { sections } : {}), stats: { connectors, prunedDangling, closedDeadEnds, linkedIslands, removedFloating, shortEdgesLeft } };
 }
 
 // ------------------------------------------------------------------ dead ends and walk islands
@@ -318,13 +278,17 @@ export function generateStreets(spec: WorldSpec, slice: WorldSlice, options: Gen
 export type StreetPlacementCheck = (props: EdgeProps, a: Vec2, b: Vec2) => boolean;
 
 /** Generated streets stay on playable land inside their own district; avenues are never placed here. */
-export function streetPlacementCheck(spec: WorldSpec, slice: WorldSlice): StreetPlacementCheck {
+export function streetPlacementCheck(
+  spec: WorldSpec,
+  slice: WorldSlice,
+  districtOf: (p: Vec2) => string | undefined = (p) => districtAt(spec, p)?.id,
+): StreetPlacementCheck {
   return (props, a, b) => {
     if (props.fixed || props.district === undefined) return false;
     const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 4));
     for (let i = 0; i <= n; i++) {
       const p = { x: a.x + ((b.x - a.x) * i) / n, y: a.y + ((b.y - a.y) * i) / n };
-      if (!slice.isPlayableLand(p) || districtAt(spec, p)?.id !== props.district) return false;
+      if (!slice.isPlayableLand(p) || districtOf(p) !== props.district) return false;
     }
     return true;
   };
@@ -504,8 +468,8 @@ export function closeTouchingDeadEnds(graph: PlanarGraph, ok: StreetPlacementChe
 /**
  * Walk islands: generated streets whose walkable component (streets with sidewalk, and alleys)
  * holds no walkable avenue, i.e. that reach the rest of the network only through a street without
- * sidewalk (the highway). Informal growth seeds along every street of its district, the highway
- * included, so a few stubs hang from it: drivable in theory, but a pedestrian there can never
+ * sidewalk (the highway). Streets seeded along every street of a district, the highway
+ * included, can leave a few stubs hanging from it: drivable in theory, but a pedestrian there can never
  * leave. Each island is linked by one straight street (the class of the island street it leaves,
  * locals before alleys) from the island node nearest to the walkable network to the nearest point
  * of it within islandLinkReach: a dead end heads on (no more than 90° off its street), any other

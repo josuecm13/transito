@@ -114,8 +114,9 @@ metrics live in `street-metrics.yaml`.
   - `formal` — streamlines of a tensor field summed from basis elements (`grid` with an angle,
     `radial` around a point, `coastline` parallel to `geometry.land`), spaced per class by
     `spacing`.
-  - `informal` — organic growth (segments grow, branch, snap to nearby nodes/edges, prune acute
-    angles, spawn alleys), tuned by `growth`.
+  - `section` — built from the section profile of the same district (`section_profiles:`, e.g.
+    `sections/el-corredor.json`): no style parameters here. A `section` district without a profile
+    is an error. The old `informal` style was retired; `style: informal` fails and names this.
 - **Blocks are derived**, never drawn: they are the faces of the planar street graph (after snap,
   merge, split at crossings, prune). Buildable area = block minus (half the street width +
   sidewalk) on each bordering street. Buildable area is split into parcels; each parcel fronts a
@@ -132,6 +133,67 @@ metrics live in `street-metrics.yaml`.
   reference. A district may opt out only with `realism: exempt` plus a written `realism_reason`.
 - **Real streets are never imported at runtime.** Reference sectors are measured offline from the
   `geospatial-reconstruction-engine` database (OSM); the game only reads the frozen numbers.
+
+### Section profiles
+
+A `style: section` district (today only `tito-corridor`, El Corredor) is built from a **section
+profile**, a JSON file in `specs/map/sections/` (shape: `sections/el-corredor.json`), referenced from
+`world.yaml` `section_profiles:` and validated by `parseSectionProfile` in `src/world/spec.ts`
+(`loadSectionProfiles` reads the files). A profile holds scalars only:
+
+- `provenance`: reference fragment, engine area id, date, source, and a note on how each number was
+  taken.
+- `boundary`: `kind` (`road`) and `openings` `{min, max}`, 0 to 2 openings. An opening is a **port**.
+- `ports`: `default_class` and `width_m` (must match that class's carriageway in
+  `street_styles.hierarchy`; the generator errors otherwise).
+- `network`: `orientation_families` (direction in degrees and share), `segment_length_m`
+  (p10/p50/p90), `junction_mix` (dead end / T / X shares), `min_junction_angle_deg`,
+  `street_km_per_km2`, `intersections_per_km2` (both **clipped to the sample box**, not the
+  unclipped values in `street-metrics.yaml`), `edge_irregularity_p90`.
+- `blocks`: `area_m2`, `elongation`, `sides`, `corner_angle_deg`, `share_corners_within_15deg_of_90`.
+- `range`: min/max bands (with the fragments they come from) for segment length p50, junction mix,
+  street km/km2, intersections/km2, block elongation p50 and block sides p50. The guards in
+  `tests/section-generate.test.ts` check the generated section against these bands.
+
+How it is used:
+
+- **Each section reads its own density from its own profile.** There is no shared density constant;
+  `tests/section-generate.test.ts` builds the same region from two profiles that differ only in
+  density and requires the output to follow each.
+- **Border and openings.** The boundary road follows a smooth outline of the district region
+  (`section/outline.ts`: rasterise, blur by the grid cell, contour, simplify within the measured
+  edge irregularity), not the stair-stepped grid edge. The hand-drawn through avenues that cross it
+  are the openings (`through` ports, counted against `openings.max`); any remaining openings up to
+  the profile range are chosen by the generator. Ports (`section/ports.ts`) carry position,
+  heading, class and width, so two sections join when their ports coincide with opposite headings
+  and compatible class and width.
+- **Two layers** (`section/network.ts`). Mapped streets follow the density figures (the street
+  layer subdivides faces down to the face size those densities imply, then adds dead ends to the
+  measured junction mix). Alleys (class `alley`) then cut the faces down to the block-area band.
+  Alleys are excluded from street metrics (`excludeClasses` in `src/world/streets/measure.ts`),
+  so the street figures measure mapped streets only.
+- **Code.** `src/world/streets/section/` (`params.ts` profile -> parameters, `outline.ts`,
+  `ports.ts`, `network.ts`, `section.ts` `generateSection`, `dmath.ts`, `bundled.ts` profile files
+  as text for the browser build). `src/world/streets/generate.ts` builds every profiled district
+  with it before the formal districts; faces, blocks, parcels, buildings and the walk graph that
+  follow are the shared steps.
+- **Adding a section profile.** Add another JSON file under `specs/map/sections/`, reference it in
+  `section_profiles:`, set that district to `style: section`, and let `parseSectionProfile` tell
+  you what is missing. The old `informal` style is retired; `style: informal` fails with a message
+  naming the profile route.
+- **Real geometry never enters the repo**: profiles hold numbers measured offline, no coordinates.
+  El Corredor's profile is calibrated on the Torrijos-Carter fragment (Belisario Frias, San
+  Miguelito), with ranges from other Panama fragments; La Carpio is not used.
+
+### Determinism across engines
+
+Chrome and Node return **different** results for `Math.sin/cos/tan/atan/atan2/asin/acos/exp/log/pow/cbrt`
+(measured 2026-11-26; `Math.sqrt` and `Math.hypot` agree). That made the browser build 788 edges /
+117 blocks / 1816 buildings while Node built 735 / 104 / 1763 from the same inputs. Section code
+therefore uses `src/world/streets/section/dmath.ts` (only `+ - * /`, `sqrt`, `floor`, `abs`).
+`tests/section-platform.test.ts` perturbs those `Math` functions by 1-2 ulp and requires the Act 1
+build to be identical; it must keep passing. Any new generator path must use `dmath` or prove it
+is robust to a last-bit change.
 - **Refreshing the references:** `npm run references` (`tools/reference-sectors.mjs`) reads every
   `reference` sector, reuses the engine import whose id (`import_area_id`) or exact bbox already
   exists (no re-import), otherwise requests it (`POST /import-areas`, background, following its

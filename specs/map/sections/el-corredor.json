@@ -1,0 +1,185 @@
+{
+  "id": "el-corredor",
+  "district": "tito-corridor",
+  "provenance": {
+    "reference_fragment": "torrijos-carter",
+    "engine_area_id": "c60a736a-b36a-41d1-8588-c829f22bea21",
+    "measured": "2026-11-26",
+    "source": "OpenStreetMap contributors",
+    "note": "numbers only, no geometry; density values are clipped to the sample bbox (the stored street-metrics.yaml values are unclipped and ~43% higher); block stats are the eligible unclipped blocks (n=39); orientation_families are the sample families kept at >=8% of street length; segment_length_m is the deduplicated graph edges; ports.width_m is world.yaml street_styles.hierarchy.local.width (residential is 53% of street length, tertiary 26%); range uses block entries only from fragments with >=20 eligible blocks (las-mananitas, juan-diaz, tocumen and the reference) and network entries from torrijos-carter, las-mananitas, juan-diaz, tocumen, pedregal, samaria; the earlier reference fragment was dropped on the director's decision"
+  },
+  "boundary": {
+    "kind": "road",
+    "openings": {
+      "min": 0,
+      "max": 2
+    }
+  },
+  "ports": {
+    "default_class": "local",
+    "width_m": 7
+  },
+  "network": {
+    "orientation_families": [
+      {
+        "deg": 170.6,
+        "share": 0.324
+      },
+      {
+        "deg": 139.3,
+        "share": 0.274
+      },
+      {
+        "deg": 82.1,
+        "share": 0.201
+      },
+      {
+        "deg": 50.2,
+        "share": 0.167
+      }
+    ],
+    "segment_length_m": {
+      "p10": 31.1,
+      "p50": 58.5,
+      "p90": 144.3,
+      "n": 230
+    },
+    "junction_mix": {
+      "dead_end": 0.274,
+      "t": 0.583,
+      "x": 0.143,
+      "n": 168
+    },
+    "min_junction_angle_deg": {
+      "p10": 74.3,
+      "p50": 87.8,
+      "p90": 90.0,
+      "n": 122
+    },
+    "street_km_per_km2": 19.51,
+    "intersections_per_km2": 203.6,
+    "edge_irregularity_p90": 0.046,
+    "edge_irregularity_n": 175
+  },
+  "blocks": {
+    "area_m2": {
+      "p10": 2726.0,
+      "p50": 4446.0,
+      "p90": 7460.0,
+      "n": 39
+    },
+    "elongation": {
+      "p10": 1.28,
+      "p50": 1.67,
+      "p90": 2.62,
+      "n": 39
+    },
+    "sides": {
+      "p10": 4.0,
+      "p50": 4.0,
+      "p90": 5.0,
+      "n": 39
+    },
+    "corner_angle_deg": {
+      "p10": 85.2,
+      "p50": 90.1,
+      "p90": 123.9,
+      "n": 175
+    },
+    "share_corners_within_15deg_of_90": 0.817
+  },
+  "range": {
+    "segment_length_p50_m": {
+      "min": 43.6,
+      "max": 96.8,
+      "fragments": [
+        "torrijos-carter",
+        "las-mananitas",
+        "juan-diaz",
+        "tocumen",
+        "pedregal",
+        "samaria"
+      ]
+    },
+    "junction_mix_dead_end": {
+      "min": 0.274,
+      "max": 0.469,
+      "fragments": [
+        "torrijos-carter",
+        "las-mananitas",
+        "juan-diaz",
+        "tocumen",
+        "pedregal",
+        "samaria"
+      ]
+    },
+    "junction_mix_t": {
+      "min": 0.381,
+      "max": 0.65,
+      "fragments": [
+        "torrijos-carter",
+        "las-mananitas",
+        "juan-diaz",
+        "tocumen",
+        "pedregal",
+        "samaria"
+      ]
+    },
+    "junction_mix_x": {
+      "min": 0.061,
+      "max": 0.309,
+      "fragments": [
+        "torrijos-carter",
+        "las-mananitas",
+        "juan-diaz",
+        "tocumen",
+        "pedregal",
+        "samaria"
+      ]
+    },
+    "street_km_per_km2": {
+      "min": 9.32,
+      "max": 20.0,
+      "fragments": [
+        "torrijos-carter",
+        "las-mananitas",
+        "juan-diaz",
+        "tocumen",
+        "pedregal",
+        "samaria"
+      ]
+    },
+    "intersections_per_km2": {
+      "min": 59.5,
+      "max": 203.6,
+      "fragments": [
+        "torrijos-carter",
+        "las-mananitas",
+        "juan-diaz",
+        "tocumen",
+        "pedregal",
+        "samaria"
+      ]
+    },
+    "block_elongation_p50": {
+      "min": 1.67,
+      "max": 2.34,
+      "fragments": [
+        "torrijos-carter",
+        "las-mananitas",
+        "juan-diaz",
+        "tocumen"
+      ]
+    },
+    "block_sides_p50": {
+      "min": 4.0,
+      "max": 5.0,
+      "fragments": [
+        "torrijos-carter",
+        "las-mananitas",
+        "juan-diaz",
+        "tocumen"
+      ]
+    }
+  }
+}

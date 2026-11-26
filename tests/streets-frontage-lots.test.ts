@@ -14,6 +14,7 @@ import type { City, EdgeProps, StreetNetwork } from '../src/world/streets/index.
 import { PlanarGraph, buildBlocks, deriveCity, drawStoreys, generateStreets, sampleDimension, stableUnit } from '../src/world/streets/index.ts';
 import { createRng } from '../src/world/rng.ts';
 import { buildingsOnStreets, distToFootprint, segDist } from './city-check.ts';
+import { act1World } from './act1-world.ts';
 import { measureFrontage } from './frontage-check.ts';
 import type { FrontageFingerprint } from './frontage-check.ts';
 
@@ -24,6 +25,9 @@ const net = generateStreets(spec, slice);
 const DISTRICT = 'tito-corridor';
 const fl = spec.blockout.districts[DISTRICT]!.frontageLots!;
 const city = deriveCity(spec, slice, net);
+// The corridor as the game builds it (derived spec + section profile). The authored grid leaves it thin, and
+// the generated corridor only exists with its section profile; the tests that look at the real corridor read this.
+const game = act1World();
 const lotBuildings = (c: City) => c.buildings.filter((b) => b.parcel === -1);
 
 /** The spec with the corridor's frontage fingerprint replaced. */
@@ -86,6 +90,7 @@ test('port: sampleDimension stays within [0.5, 1.5] x median and is exactly the 
 // ------------------------------------------------------------------ real corridor
 
 test('corridor: buildings come from frontage lots (no parcels in the district), other districts keep parcels', () => {
+  const city = game.city;
   const lots = lotBuildings(city);
   assert.ok(lots.length > 1000, `${lots.length} frontage-lot buildings`);
   assert.ok(lots.every((b) => b.district === DISTRICT));
@@ -215,7 +220,7 @@ function bandViolations(fp: FrontageFingerprint, lots: FrontageLots): string[] {
   return out;
 }
 
-const measured = measureFrontage(city, net.graph, DISTRICT);
+const measured = measureFrontage(game.city, game.streets.graph, DISTRICT);
 
 test('measured fingerprint of the generated corridor lands inside the La Carpio band', () => {
   console.log(`corridor fingerprint: ${JSON.stringify(measured)}`);

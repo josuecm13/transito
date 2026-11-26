@@ -14,6 +14,7 @@ import { buildingCorners } from '../src/world/blockout.ts';
 import type { City, EdgeProps, StreetNetwork } from '../src/world/streets/index.ts';
 import { PlanarGraph, buildBlocks, deriveCity, generateStreets } from '../src/world/streets/index.ts';
 import { badFrontages, buildingsInParcels, buildingsOnStreets, distToFootprint, parcelsOutsideBuildable } from './city-check.ts';
+import { act1World } from './act1-world.ts';
 
 const spec = parseWorldSpec(readFileSync(join(import.meta.dirname, '../specs/map/world.yaml'), 'utf8'));
 const slice = sliceWorld(spec);
@@ -172,4 +173,10 @@ test('performance: deriveCity on the real active area < 500 ms in Node', () => {
   const median = times[1]!;
   console.log(`deriveCity real area: ${times.map((t) => t.toFixed(0)).join(' / ')} ms (median ${median.toFixed(0)})`);
   assert.ok(median < 500, `median ${median.toFixed(0)} ms`);
+});
+
+test('corridor (the game\'s Act 1 build: derived spec + section profile): its buildings stand on no street', () => {
+  const { city: c, streets } = act1World();
+  assert.ok(c.buildings.filter((b) => b.district === 'tito-corridor').length > 500, 'the corridor has buildings');
+  assert.deepEqual(buildingsOnStreets(c, streets.graph), []);
 });

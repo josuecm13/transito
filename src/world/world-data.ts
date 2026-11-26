@@ -1,5 +1,6 @@
 import type { WorldSpec } from './spec.ts';
-import { parseWorldSpec } from './spec.ts';
+import { loadSectionProfiles, parseWorldSpec } from './spec.ts';
+import { bundledSectionSources } from './streets/section/bundled.ts';
 import type { WorldSlice } from './slice.ts';
 import { sliceWorld } from './slice.ts';
 import type { StreetNetwork } from './streets/generate.ts';
@@ -45,7 +46,14 @@ export function buildWorldData(rawYaml: string, isthmus?: Isthmus): WorldData {
   const iso = isthmus ?? generateIsthmus(authored);
   const { spec } = gameSpecFromIsthmus(authored, iso);
   const slice = sliceWorld(spec);
-  const streets = generateStreets(spec, slice);
+  // Districts with a section profile (world.yaml `section_profiles:`) are built by the section generator.
+  const sources = bundledSectionSources();
+  const profiles = loadSectionProfiles(spec, (path) => {
+    const text = sources[path];
+    if (text === undefined) throw new Error(`section profile ${path} is not bundled`);
+    return text;
+  });
+  const streets = generateStreets(spec, slice, { profiles });
   const city = deriveCity(spec, slice, streets);
   const walkGraph = buildWalkGraph(streets.graph, slice.isPlayableLand, spec.population.pedestrians.walkOn);
   const g = spec.relief.grid;

@@ -6,6 +6,7 @@ import { parseWorldSpec, WorldSpecError } from '../src/world/spec.ts';
 import { sliceWorld } from '../src/world/slice.ts';
 import { deriveCity, generateStreets } from '../src/world/streets/index.ts';
 import { isWholeStoreys, storeyRange, streetScaleProblems, wholeLanes, wholeStoreyHeight } from '../src/world/scale.ts';
+import { act1World } from './act1-world.ts';
 import { TITO_BODY, bodyHeight } from '../src/sim/body.ts';
 
 // Human scale (README "Human scale"): one fixed set of measures in `scale:`; everything generated obeys it.
@@ -85,15 +86,24 @@ test('generated buildings are whole storeys inside their district range', () => 
 });
 
 test('generated streets hold whole lanes and walkable sidewalks', () => {
-  const kindOf = new Map(spec.routes.map((r) => [r.id, r.kind]));
+  // The Act 1 build as the game makes it (derived spec + section profile), so El Corredor is really there.
+  const game = act1World();
+  const net = game.streets;
+  const kindOf = new Map(game.spec.routes.map((r) => [r.id, r.kind]));
   let checked = 0;
+  let corridorChecked = 0;
   const problems: string[] = [];
   for (const e of net.graph.edges) {
     if (e.cls === 'frame') continue;
     if (e.cls === 'avenue' && !scale.traffic.includes(kindOf.get(e.routeId ?? '') ?? '')) continue; // rail, runway, waterway
     checked++;
+    if (e.district === 'tito-corridor') corridorChecked++;
     problems.push(...streetScaleProblems(`edge ${e.id} (${e.cls}${e.routeId ? ' ' + e.routeId : ''})`, e, scale));
   }
-  assert.ok(checked > 1000, `${checked} street edges checked`);
+  // Non-vacuity guard, measured on the Act 1 build (derived spec + section profile): 671 edges checked, 442 of them
+  // El Corredor's own local + alley streets. (The old `> 1000` only held because the retired grower filled the
+  // corridor on the authored grid.) The rule is the `problems` assertion below; these only prove it saw the corridor.
+  assert.ok(corridorChecked >= 300, `${corridorChecked} corridor street edges checked`);
+  assert.ok(checked >= 600, `${checked} street edges checked`);
   assert.deepEqual(problems.slice(0, 5), []);
 });

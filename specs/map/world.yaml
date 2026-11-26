@@ -179,6 +179,12 @@ scale:
   sidewalk_min: 1.5       # m, a sidewalk is 0 (none) or at least this wide
   traffic: [highway, arterial, road]   # street_profiles kinds with lanes (every street_styles.hierarchy class has them too)
 
+# Section profiles: measured numbers that drive the street-section generator, one JSON per section,
+# loaded next to this file like procedural-edits.json (src/world/spec.ts loadSectionProfiles).
+# Key = profile id (must equal the file's `id`); the file names its district.
+section_profiles:
+  el-corredor: specs/map/sections/el-corredor.json
+
 # Generated street network (issue #7). See "Streets" in README.md.
 # Avenues are the hand-drawn `routes` (arterial/highway): the generator treats them as fixed
 # constraints and never moves them. Everything below describes the streets it GENERATES between
@@ -200,7 +206,7 @@ street_styles:
   #                     each optionally with weight (unitless, default 1) and decay (m, falloff
   #                     distance of that element's influence).
   #                     `spacing` = separation between streamlines (m) per generated class.
-  #   style: informal → organic growth (Parish & Müller style). Numbers in `growth`, units inline.
+  #   style: section  → built from the section profile of the same district (section_profiles above).
   #   reference: real sectors whose metrics the generated network must match (frozen in
   #     street-metrics.yaml under the same name). Each sector: name + EITHER bbox
   #     [min_lon, min_lat, max_lon, max_lat] OR place (text for the engine's /places/search) +
@@ -213,13 +219,7 @@ street_styles:
   #   realism: exempt (+ realism_reason, required) skips the realism test for that district.
   districts:
     tito-corridor:
-      style: informal
-      growth:
-        segment_length: [40, 110]   # m, [min, max] length of each grown segment
-        branch_probability: 0.35    # 0–1, chance a segment end spawns a side branch
-        snap_radius: 15             # m, a growing end within this distance snaps to a node/edge
-        min_angle: 30               # deg, branches meeting at a sharper angle are pruned
-        alley_probability: 0.15     # 0–1, chance a new branch is an alley instead of a local
+      style: section
       reference:
         - name: La Carpio
           bbox: [-84.1560494, 9.9581759, -84.1430313, 9.9666528]

@@ -40,6 +40,12 @@ fragments:
     center: [9.0932, -79.4039]
     size_m: 800
     bbox: [-79.40753897729097, 9.089606755300036, -79.40026102270902, 9.096793244699963]
+  mateo-iturralde:
+    import_area_id: "3107f8f8-09e8-4c47-b4d6-e8fc0ee73929"
+    place_name: "Mateo Iturralde"
+    center: [9.034, -79.49714]
+    size_m: 800
+    bbox: [-79.5007825, 9.0304027, -79.4934975, 9.0375973]
   panama-viejo-ruins:
     import_area_id: "b8572933-b18a-4220-953b-c894df338860"
     place_name: "Parque Lefevre"
@@ -78,3 +84,9 @@ fragments:
     center: [9.0783, -79.4913]
     size_m: 800
     bbox: [-79.49493882595787, 9.074706755300037, -79.48766117404212, 9.081893244699964]
+  villa-lucre-sm:
+    import_area_id: "7acf4185-6dce-4760-b224-ca67a14639aa"
+    place_name: "José Domingo Espinar"
+    center: [9.04273, -79.48334]
+    size_m: 800
+    bbox: [-79.4869826, 9.0391327, -79.4796974, 9.0463273]

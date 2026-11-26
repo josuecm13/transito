@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { before, test } from 'node:test';
-import { parseWorldSpec, WorldSpecError } from '../src/world/spec.ts';
+import { loadSectionProfiles, parseWorldSpec, WorldSpecError } from '../src/world/spec.ts';
 import { generateIsthmus, type Isthmus } from '../src/world/proc/isthmus.ts';
 import { gameSpecFromIsthmus, type GameSpec } from '../src/world/proc/game-spec.ts';
 import { sliceWorld } from '../src/world/slice.ts';
@@ -88,7 +88,8 @@ test('landmarks and routes: procedural positions and generated roads, nothing au
 
 test('the street and city pipeline runs on it: El Corredor gets streets and houses, only on its cells', () => {
   const slice = sliceWorld(game.spec);
-  const net = generateStreets(game.spec, slice);
+  const profiles = loadSectionProfiles(game.spec, (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'));
+  const net = generateStreets(game.spec, slice, { profiles });
   const city = deriveCity(game.spec, slice, net);
   assert.ok(net.graph.edges.length > 200, `${net.graph.edges.length} street edges`);
   assert.ok(city.buildings.length > 500, `${city.buildings.length} buildings`);

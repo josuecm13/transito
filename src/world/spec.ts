@@ -140,15 +140,6 @@ export type FieldElement =
   | { kind: 'radial'; at: Vec2; weight?: number; decay?: number }
   | { kind: 'coastline'; weight?: number; decay?: number };
 
-/** Organic-growth parameters for informal districts (units as commented in world.yaml). */
-export interface InformalGrowth {
-  segmentLength: Range;
-  branchProbability: number;
-  snapRadius: number;
-  minAngle: number;
-  alleyProbability: number;
-}
-
 /**
  * A real sector whose frozen metrics (specs/map/street-metrics.yaml, same name) the generated
  * network is compared against. Exactly one of `bbox` or `place` + `sizeM`.
@@ -172,7 +163,8 @@ interface StreetStyleCommon {
 
 export type StreetStyleDistrict =
   | (StreetStyleCommon & { style: 'formal'; field: FieldElement[]; spacing: { collector: number; local: number } })
-  | (StreetStyleCommon & { style: 'informal'; growth: InformalGrowth });
+  /** Built from the section profile of the same district (section_profiles:); no style parameters. */
+  | (StreetStyleCommon & { style: 'section' });
 
 export interface StreetStyles {
   seed: number;
@@ -219,6 +211,8 @@ export interface WorldSpec {
   canal: CanalSpec;
   /** Procedural isthmus inputs (procedural:), read by src/world/proc/isthmus.ts. */
   procedural: ProceduralSpec;
+  /** section_profiles: profile id -> JSON file next to world.yaml (see loadSectionProfiles). Absent when none. */
+  sectionProfiles?: Record<string, string>;
   /** Human scale (scale:): storey, door, lane, sidewalk, Tito's height. See src/world/scale.ts. */
   scale: ScaleSpec;
 }
@@ -659,6 +653,8 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
   const canal = parseCanal(r, doc.canal);
   const procedural = parseProcedural(r, doc.procedural, bounds, landmarks.map((l) => l.id), districts.map((d) => d.id));
 
+  const sectionProfiles = parseSectionProfileRefs(r, doc.section_profiles);
+
   if (r.problems.length > 0) throw new WorldSpecError(r.problems);
 
   return {
@@ -681,7 +677,26 @@ export function parseWorldSpec(rawYaml: string): WorldSpec {
     canal,
     procedural,
     scale,
+    ...(sectionProfiles ? { sectionProfiles } : {}),
   };
+}
+
+/** section_profiles: (optional) map of profile id -> path of a JSON file, relative to the repo root. */
+function parseSectionProfileRefs(r: Reader, raw: unknown): Record<string, string> | undefined {
+  if (raw === undefined) return undefined;
+  if (!isObj(raw)) {
+    r.problems.push('section_profiles: expected a mapping of profile id -> file path');
+    return undefined;
+  }
+  const out: Record<string, string> = {};
+  for (const [id, file] of Object.entries(raw)) {
+    if (typeof file !== 'string' || !file.endsWith('.json')) {
+      r.problems.push(`section_profiles.${id}: expected a path to a .json file`);
+    } else {
+      out[id] = file;
+    }
+  }
+  return out;
 }
 
 const SCALE_KEYS = ['human', 'storey', 'door', 'lane', 'sidewalk_min', 'traffic'] as const;
@@ -931,38 +946,12 @@ function parseStreetStyles(
           }
         }
         out.districts[id] = { ...common, style: 'formal', field, spacing };
+      } else if (o.style === 'section') {
+        out.districts[id] = { ...common, style: 'section' };
       } else if (o.style === 'informal') {
-        const gp = `${path}.growth`;
-        const g = r.obj(o.growth, gp);
-        const growth: InformalGrowth = {
-          segmentLength: [NaN, NaN],
-          branchProbability: NaN,
-          snapRadius: NaN,
-          minAngle: NaN,
-          alleyProbability: NaN,
-        };
-        if (g) {
-          growth.segmentLength = r.pair(g.segment_length, `${gp}.segment_length`);
-          const [lo, hi] = growth.segmentLength;
-          if (isNum(lo) && isNum(hi) && !(lo > 0 && lo <= hi)) {
-            r.problems.push(`${gp}.segment_length: expected 0 < min <= max`);
-          }
-          growth.branchProbability = r.num(g, 'branch_probability', gp);
-          growth.snapRadius = r.num(g, 'snap_radius', gp);
-          growth.minAngle = r.num(g, 'min_angle', gp);
-          growth.alleyProbability = r.num(g, 'alley_probability', gp);
-          const pos = { branch_probability: growth.branchProbability, snap_radius: growth.snapRadius,
-            min_angle: growth.minAngle, alley_probability: growth.alleyProbability };
-          for (const [k, v] of Object.entries(pos)) {
-            if (isNum(v) && !(v > 0)) r.problems.push(`${gp}.${k}: must be > 0`);
-          }
-          for (const [k, v] of [['branch_probability', growth.branchProbability], ['alley_probability', growth.alleyProbability]] as const) {
-            if (isNum(v) && v > 1) r.problems.push(`${gp}.${k}: must be <= 1`);
-          }
-        }
-        out.districts[id] = { ...common, style: 'informal', growth };
+        r.problems.push(`${path}.style: "informal" was retired: describe the district with a section profile (section_profiles: + style: section)`);
       } else {
-        r.problems.push(`${path}.style: expected "formal" or "informal", got ${JSON.stringify(o.style)}`);
+        r.problems.push(`${path}.style: expected "formal" or "section", got ${JSON.stringify(o.style)}`);
       }
     }
 
@@ -1907,4 +1896,160 @@ function parseProcTransit(P: ProcReader, raw: unknown, path: string): Procedural
     bridge: P.num(o, 'bridge', path, 'pos'),
     interchangeRadius: P.num(o, 'interchange_radius', path, 'pos'),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Section profiles (specs/map/sections/*.json): measured numbers that drive the street-section
+// generator. Loaded next to world.yaml like procedural-edits.json; validated here, same `problems` style.
+// ---------------------------------------------------------------------------------------------
+
+export interface Percentiles { p10: number; p50: number; p90: number; n: number }
+
+export interface SectionProfile {
+  id: string;
+  district: string;
+  provenance: Obj;
+  boundary: { kind: 'road'; openings: { min: number; max: number } };
+  ports: { default_class: string; width_m: number };
+  network: Obj;
+  blocks: Obj;
+  range: Record<string, { min: number; max: number; fragments: string[] }>;
+}
+
+const PROFILE_TOP = ['id', 'district', 'provenance', 'boundary', 'ports', 'network', 'blocks', 'range'] as const;
+const NETWORK_PERCENTILES = ['segment_length_m', 'min_junction_angle_deg'] as const;
+const BLOCK_PERCENTILES = ['area_m2', 'elongation', 'sides', 'corner_angle_deg'] as const;
+
+/** Every numeric leaf must be finite and >= 0 (JSON cannot hold NaN, but a hand edit can hold a string or a minus). */
+function checkNumbers(v: unknown, path: string, out: string[]): void {
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v) || v < 0) out.push(`${path}: must be a finite number >= 0`);
+  } else if (Array.isArray(v)) {
+    v.forEach((x, i) => checkNumbers(x, `${path}[${i}]`, out));
+  } else if (isObj(v)) {
+    for (const [k, x] of Object.entries(v)) checkNumbers(x, `${path}.${k}`, out);
+  }
+}
+
+/** Parses and validates one section profile. Returns the problems (empty = valid) and the profile when valid. */
+export function parseSectionProfile(text: string, spec: WorldSpec): { profile?: SectionProfile; problems: string[] } {
+  const problems: string[] = [];
+  let doc: unknown;
+  try {
+    doc = JSON.parse(text);
+  } catch (e) {
+    return { problems: [`section profile: JSON syntax: ${e instanceof Error ? e.message : String(e)}`] };
+  }
+  if (!isObj(doc)) return { problems: ['section profile: expected an object'] };
+  const at = typeof doc.id === 'string' && doc.id !== '' ? `section ${doc.id}` : 'section profile';
+  const P = (m: string): void => void problems.push(`${at}.${m}`);
+
+  for (const k of PROFILE_TOP) if (doc[k] === undefined) P(`${k}: required field missing`);
+  checkNumbers(doc, at, problems);
+
+  if (doc.id !== undefined && (typeof doc.id !== 'string' || doc.id === '')) P('id: expected a non-empty string');
+  if (doc.district !== undefined) {
+    if (typeof doc.district !== 'string' || !spec.districts.some((d) => d.id === doc.district)) {
+      P(`district: unknown district ${JSON.stringify(doc.district)}`);
+    }
+  }
+
+  const pct = (o: unknown, path: string): void => {
+    if (!isObj(o)) return void P(`${path}: required quantity missing`);
+    for (const k of ['p10', 'p50', 'p90', 'n']) if (!isNum(o[k])) P(`${path}.${k}: expected a number`);
+    if (isNum(o.p10) && isNum(o.p50) && isNum(o.p90) && !(o.p10 <= o.p50 && o.p50 <= o.p90)) {
+      P(`${path}: expected p10 <= p50 <= p90`);
+    }
+  };
+
+  const boundary = doc.boundary;
+  if (isObj(boundary)) {
+    if (boundary.kind !== 'road') P('boundary.kind: expected "road"');
+    const op = boundary.openings;
+    if (!isObj(op)) {
+      P('boundary.openings: required field missing');
+    } else if (!(Number.isInteger(op.min) && Number.isInteger(op.max) && (op.min as number) >= 0 && (op.min as number) <= (op.max as number) && (op.max as number) <= 2)) {
+      P('boundary.openings: expected integers 0 <= min <= max <= 2');
+    }
+  }
+
+  const ports = doc.ports;
+  if (isObj(ports)) {
+    const classes = Object.keys(spec.streetStyles.hierarchy);
+    if (typeof ports.default_class !== 'string' || !classes.includes(ports.default_class)) {
+      P(`ports.default_class: expected one of ${classes.join(', ')}`);
+    }
+    if (!isNum(ports.width_m) || !(ports.width_m > 0)) P('ports.width_m: expected a number > 0');
+  }
+
+  const net = doc.network;
+  if (isObj(net)) {
+    for (const k of NETWORK_PERCENTILES) pct(net[k], `network.${k}`);
+    for (const k of ['street_km_per_km2', 'intersections_per_km2', 'edge_irregularity_p90']) {
+      if (!isNum(net[k])) P(`network.${k}: expected a number`);
+    }
+    const fam = net.orientation_families;
+    if (!Array.isArray(fam) || fam.length === 0) {
+      P('network.orientation_families: expected a non-empty list');
+    } else {
+      let sum = 0;
+      fam.forEach((f, i) => {
+        const share = isObj(f) ? f.share : undefined;
+        if (!isObj(f) || !isNum(f.deg) || f.deg >= 180) P(`network.orientation_families[${i}].deg: expected a number in [0, 180)`);
+        if (!isNum(share) || !(share > 0 && share <= 1)) P(`network.orientation_families[${i}].share: must be in (0, 1]`);
+        else sum += share;
+      });
+      if (sum > 1 + 1e-9) P(`network.orientation_families: shares sum to ${sum.toFixed(3)}, expected <= 1`);
+    }
+    const jm = net.junction_mix;
+    if (!isObj(jm)) {
+      P('network.junction_mix: required field missing');
+    } else {
+      const parts = ['dead_end', 't', 'x'].map((k) => jm[k]);
+      if (!parts.every(isNum)) P('network.junction_mix: dead_end, t and x must be numbers');
+      else if (Math.abs((parts as number[]).reduce((a, b) => a + b, 0) - 1) > 0.01) P('network.junction_mix: dead_end + t + x must sum to 1 (+-0.01)');
+      if (!isNum(jm.n)) P('network.junction_mix.n: expected a number');
+    }
+  }
+
+  const blocks = doc.blocks;
+  if (isObj(blocks)) {
+    for (const k of BLOCK_PERCENTILES) pct(blocks[k], `blocks.${k}`);
+    if (!isNum(blocks.share_corners_within_15deg_of_90) || blocks.share_corners_within_15deg_of_90 > 1) {
+      P('blocks.share_corners_within_15deg_of_90: expected a number in [0, 1]');
+    }
+  }
+
+  if (isObj(doc.range)) {
+    for (const [k, v] of Object.entries(doc.range)) {
+      if (!isObj(v) || !isNum(v.min) || !isNum(v.max) || !Array.isArray(v.fragments)) P(`range.${k}: expected {min, max, fragments}`);
+      else if (v.min > v.max) P(`range.${k}: expected min <= max`);
+    }
+  }
+
+  return problems.length > 0 ? { problems } : { profile: doc as unknown as SectionProfile, problems };
+}
+
+/**
+ * Loads every profile named by world.yaml `section_profiles:` through `read` (a path -> text function,
+ * the caller decides how to read files). Throws WorldSpecError listing all problems; a profile whose
+ * `id` differs from its key is a problem too.
+ */
+export function loadSectionProfiles(spec: WorldSpec, read: (path: string) => string): Record<string, SectionProfile> {
+  const out: Record<string, SectionProfile> = {};
+  const problems: string[] = [];
+  for (const [id, file] of Object.entries(spec.sectionProfiles ?? {})) {
+    const res = parseSectionProfile(read(file), spec);
+    problems.push(...res.problems.map((p) => `${file}: ${p}`));
+    if (res.profile) {
+      if (res.profile.id !== id) problems.push(`${file}: id ${JSON.stringify(res.profile.id)} does not match section_profiles key ${JSON.stringify(id)}`);
+      out[id] = res.profile;
+    }
+  }
+  const profiled = new Set(Object.values(out).map((p) => p.district));
+  for (const [id, st] of Object.entries(spec.streetStyles.districts)) {
+    if (st.style === 'section' && !profiled.has(id)) problems.push(`street_styles.districts.${id}: style: section needs a section profile whose district is "${id}" (section_profiles:)`);
+  }
+  if (problems.length > 0) throw new WorldSpecError(problems);
+  return out;
 }

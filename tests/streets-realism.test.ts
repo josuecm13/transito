@@ -1,7 +1,7 @@
 /**
  * Realism: each formal, non-exempt district of the active area must fall inside the band of its
  * reference sectors (specs/map/street-metrics.yaml: references + band.default + band.overrides).
- * Informal districts get their streets in S4 and are checked there.
+ * Section districts (profile-built) are not checked here.
  *
  * Area normalization ('cells'): the references' km² is st_area(bbox) and the engine polygonizes
  * roads + the bbox ring, so a reference's per-km² densities count every part of its box (Santa

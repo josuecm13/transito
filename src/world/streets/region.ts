@@ -32,7 +32,11 @@ export const BARRIER_KINDS: ReadonlySet<string> = new Set(['runway', 'rail', 'wa
 const onBoundsEdge = (a: Vec2, b: Vec2, w: number, h: number): boolean =>
   (a.x === 0 && b.x === 0) || (a.x === w && b.x === w) || (a.y === 0 && b.y === 0) || (a.y === h && b.y === h);
 
-export function buildFrame(spec: WorldSpec, rect: Rect): FrameSegment[] {
+/**
+ * `skipDistricts`: districts built by a section profile. Their stair-stepped grid border is NOT part of the
+ * frame (the section's own smooth boundary road replaces it), so borders touching them are left out.
+ */
+export function buildFrame(spec: WorldSpec, rect: Rect, skipDistricts: ReadonlySet<string> = new Set()): FrameSegment[] {
   const out: FrameSegment[] = [];
   const { width: W, height: H } = spec.bounds;
   const rings = [spec.land, ...spec.islands.map((i) => i.points)];
@@ -62,6 +66,7 @@ export function buildFrame(spec: WorldSpec, rect: Rect): FrameSegment[] {
   const cs = spec.bounds.cellSize;
   const rows = spec.grid.length;
   const code = (c: number, r: number): string | undefined => spec.grid[r]?.[c];
+  const skipCodes = new Set(spec.districts.filter((d) => skipDistricts.has(d.id)).map((d) => d.code));
   for (let r = 0; r < rows; r++) {
     const row = spec.grid[r] as string[];
     for (let c = 0; c < row.length; c++) {
@@ -71,8 +76,9 @@ export function buildFrame(spec: WorldSpec, rect: Rect): FrameSegment[] {
       const east = code(c + 1, r);
       const south = code(c, r + 1);
       const segs: [Vec2, Vec2][] = [];
-      if (east !== undefined && east !== me) segs.push([{ x: x0 + cs, y: y0 }, { x: x0 + cs, y: y0 + cs }]);
-      if (south !== undefined && south !== me) segs.push([{ x: x0, y: y0 }, { x: x0 + cs, y: y0 }]);
+      const skipped = (other: string | undefined): boolean => skipCodes.has(me as string) || (other !== undefined && skipCodes.has(other));
+      if (east !== undefined && east !== me && !skipped(east)) segs.push([{ x: x0 + cs, y: y0 }, { x: x0 + cs, y: y0 + cs }]);
+      if (south !== undefined && south !== me && !skipped(south)) segs.push([{ x: x0, y: y0 }, { x: x0 + cs, y: y0 }]);
       for (const [a, b] of segs) {
         const cl = clipSegmentToRect(a, b, rect);
         if (!cl) continue;

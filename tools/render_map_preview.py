@@ -366,23 +366,12 @@ def check_streets(w, metrics):
                 for k in ("collector", "local"):
                     if not (is_num(sp.get(k)) and sp[k] > 0):
                         errs.append(f"{p}.spacing.{k} must be a positive number")
+        elif style == "section":
+            pass  # built by the section generator from the district profile (section_profiles in world.yaml)
         elif style == "informal":
-            g = d.get("growth")
-            if not isinstance(g, dict):
-                errs.append(f"{p}: informal style needs a growth block")
-            else:
-                sl = g.get("segment_length")
-                if not (isinstance(sl, list) and len(sl) == 2 and all(is_num(v) and v > 0 for v in sl)
-                        and sl[0] <= sl[1]):
-                    errs.append(f"{p}.growth.segment_length must be [min, max] positive with min <= max")
-                for k in ("branch_probability", "snap_radius", "min_angle", "alley_probability"):
-                    if not (is_num(g.get(k)) and g[k] > 0):
-                        errs.append(f"{p}.growth.{k} must be a positive number")
-                for k in ("branch_probability", "alley_probability"):
-                    if is_num(g.get(k)) and g[k] > 1:
-                        errs.append(f"{p}.growth.{k} must be <= 1")
+            errs.append(f"{p}: style 'informal' is retired; use style: section with a section profile (section_profiles)")
         else:
-            errs.append(f"{p}: style '{style}' must be formal or informal")
+            errs.append(f"{p}: style '{style}' must be formal or section")
         lu = d.get("land_use")
         if not isinstance(lu, dict):
             errs.append(f"{p}: land_use {{park, court}} missing")

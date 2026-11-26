@@ -10,6 +10,7 @@ import type { Vec2 } from '../src/world/vec.ts';
 import { AVENUE_KINDS, generateStreets } from '../src/world/streets/index.ts';
 import type { Block } from '../src/world/streets/index.ts';
 import { checkPlanarity, pointSegmentDistance, streetComponents } from './streets-check.ts';
+import { act1World } from './act1-world.ts';
 
 const spec = parseWorldSpec(readFileSync(join(import.meta.dirname, '../specs/map/world.yaml'), 'utf8'));
 const slice = sliceWorld(spec);
@@ -146,4 +147,17 @@ test('performance: generateStreets on the real spec in < 700 ms (median of 3)', 
   const median = times[1]!;
   console.log(`# generateStreets median ${median.toFixed(0)} ms (runs ${times.map((t) => t.toFixed(0)).join(', ')})`);
   assert.ok(median < 700, `${median} ms`);
+});
+
+test('corridor (the game\'s Act 1 build: derived spec + section profile): planar, no close nodes, no short edges', () => {
+  const g = act1World().streets.graph;
+  assert.ok(g.edges.some((e) => e.district === 'tito-corridor'), 'the corridor has streets');
+  const r = checkPlanarity(g);
+  assert.deepEqual(r.crossings, []);
+  assert.deepEqual(r.closeNodes, []);
+  assert.deepEqual(r.nodeNearEdge, []);
+  // Fixed avenue curves (a route vertex every few metres) are short by construction and are not the corridor's.
+  const own = new Set(g.edges.filter((e) => e.district === 'tito-corridor').map((e) => e.id));
+  assert.ok(own.size > 100, `${own.size} corridor edges`);
+  assert.deepEqual(r.shortEdges.filter((m) => own.has(Number(/edge (\d+)/.exec(m)?.[1]))), []);
 });

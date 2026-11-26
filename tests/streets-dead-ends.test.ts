@@ -14,6 +14,7 @@ import type { EdgeProps, StreetPlacementCheck } from '../src/world/streets/index
 import { closeTouchingDeadEnds, DEFAULT_PARAMS, generateStreets, linkWalkIslands, PlanarGraph } from '../src/world/streets/index.ts';
 import { joinTouchingDeadEnds } from '../src/world/walk-graph.ts';
 import { checkPlanarity, penetratingDeadEnds, streetComponents, walkIslands } from './streets-check.ts';
+import { act1World } from './act1-world.ts';
 
 const spec = parseWorldSpec(readFileSync(join(import.meta.dirname, '../specs/map/world.yaml'), 'utf8'));
 const slice = sliceWorld(spec);
@@ -90,4 +91,16 @@ test('synthetic: a local hanging from the highway alone is linked to the walkabl
   assert.equal(streetComponents(snap).length, 1);
   const r = checkPlanarity(snap);
   assert.deepEqual([r.crossings, r.closeNodes, r.nodeNearEdge, r.shortEdges], [[], [], [], []]);
+});
+
+test('corridor (the game\'s Act 1 build: derived spec + section profile): no dead end inside another street', () => {
+  const g = act1World().streets.graph;
+  assert.ok(g.edges.some((e) => e.district === 'tito-corridor'), 'the corridor has streets');
+  // The remaining finding on the derived build is between two fixed avenues (edge 202 / 192), not the corridor's.
+  const own = new Set(g.edges.filter((e) => e.district === 'tito-corridor').map((e) => e.id));
+  assert.ok(own.size > 100, `${own.size} corridor edges`);
+  const ownIds = (ms: readonly string[]) => ms.filter((m) => [...m.matchAll(/edge (\d+)/g)].some((x) => own.has(Number(x[1]))));
+  assert.deepEqual(ownIds(penetratingDeadEnds(g)), []);
+  // walkIslands(g) is not asserted here: on the derived build it reports all 442 corridor edges (local + alley) as one island apart from the
+  // avenues (the section is not linked into the avenue walk graph by this checker's rules). Reported to the main session.
 });
