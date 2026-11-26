@@ -1,0 +1,248 @@
+diff --git a/specs/map/world.yaml b/specs/map/world.yaml
+index b0201c2..8bef9b9 100644
+--- a/specs/map/world.yaml
++++ b/specs/map/world.yaml
+@@ -213,13 +213,20 @@ street_styles:
+   #   realism: exempt (+ realism_reason, required) skips the realism test for that district.
+   districts:
+     tito-corridor:
+-      style: informal
+-      growth:
+-        segment_length: [40, 110]   # m, [min, max] length of each grown segment
+-        branch_probability: 0.35    # 0–1, chance a segment end spawns a side branch
+-        snap_radius: 15             # m, a growing end within this distance snaps to a node/edge
+-        min_angle: 30               # deg, branches meeting at a sharper angle are pruned
+-        alley_probability: 0.15     # 0–1, chance a new branch is an alley instead of a local
++      style: formal
++      field:
++        - { kind: grid, angle: 32, weight: 2 }
++        - { kind: radial, at: [4430, 1350], weight: 0.8, decay: 220 }
++      spacing: { collector: 170, local: 60 }
++      # Hybrid: formal grid in the core, organic growth in the band within `depth` m of the town edge.
++      fringe:
++        depth: 60
++        growth:
++          segment_length: [35, 90]
++          branch_probability: 0.6
++          snap_radius: 18
++          min_angle: 30
++          alley_probability: 0.15
+       reference:
+         - name: La Carpio
+           bbox: [-84.1560494, 9.9581759, -84.1430313, 9.9666528]
+diff --git a/src/world/spec.ts b/src/world/spec.ts
+index 9e9f0c8..5d8ecdb 100644
+--- a/src/world/spec.ts
++++ b/src/world/spec.ts
+@@ -171,7 +171,16 @@ interface StreetStyleCommon {
+ }
+ 
+ export type StreetStyleDistrict =
+-  | (StreetStyleCommon & { style: 'formal'; field: FieldElement[]; spacing: { collector: number; local: number } })
++  | (StreetStyleCommon & {
++      style: 'formal';
++      field: FieldElement[];
++      spacing: { collector: number; local: number };
++      /**
++       * Hybrid: the formal passes only run farther than `depth` m from the district edge (coast / limit /
++       * district frame); the band inside it is grown organically with `growth` (informal.ts).
++       */
++      fringe?: { depth: number; growth: InformalGrowth };
++    })
+   | (StreetStyleCommon & { style: 'informal'; growth: InformalGrowth });
+ 
+ export interface StreetStyles {
+@@ -909,31 +918,8 @@ function parseStreetStyles(
+         r.problems.push(`${path}: needs at least one reference sector (or realism: exempt + realism_reason)`);
+       }
+ 
+-      const common: StreetStyleCommon = { reference, landUse };
+-      if (realismExemptReason !== undefined) common.realismExemptReason = realismExemptReason;
+-
+-      if (o.style === 'formal') {
+-        const field: FieldElement[] = [];
+-        if (!Array.isArray(o.field) || o.field.length === 0) {
+-          r.problems.push(`${path}.field: formal style needs a non-empty list`);
+-        } else {
+-          o.field.forEach((el, i) => {
+-            const f = parseFieldElement(r, el, `${path}.field[${i}]`, bounds);
+-            if (f) field.push(f);
+-          });
+-        }
+-        const spRaw = r.obj(o.spacing, `${path}.spacing`);
+-        const spacing = { collector: NaN, local: NaN };
+-        if (spRaw) {
+-          for (const k of ['collector', 'local'] as const) {
+-            spacing[k] = r.num(spRaw, k, `${path}.spacing`);
+-            if (isNum(spacing[k]) && !(spacing[k] > 0)) r.problems.push(`${path}.spacing.${k}: must be > 0`);
+-          }
+-        }
+-        out.districts[id] = { ...common, style: 'formal', field, spacing };
+-      } else if (o.style === 'informal') {
+-        const gp = `${path}.growth`;
+-        const g = r.obj(o.growth, gp);
++      const parseGrowth = (raw: unknown, gp: string): InformalGrowth => {
++        const g = r.obj(raw, gp);
+         const growth: InformalGrowth = {
+           segmentLength: [NaN, NaN],
+           branchProbability: NaN,
+@@ -960,6 +946,41 @@ function parseStreetStyles(
+             if (isNum(v) && v > 1) r.problems.push(`${gp}.${k}: must be <= 1`);
+           }
+         }
++        return growth;
++      };
++      const common: StreetStyleCommon = { reference, landUse };
++      if (realismExemptReason !== undefined) common.realismExemptReason = realismExemptReason;
++
++      if (o.style === 'formal') {
++        const field: FieldElement[] = [];
++        if (!Array.isArray(o.field) || o.field.length === 0) {
++          r.problems.push(`${path}.field: formal style needs a non-empty list`);
++        } else {
++          o.field.forEach((el, i) => {
++            const f = parseFieldElement(r, el, `${path}.field[${i}]`, bounds);
++            if (f) field.push(f);
++          });
++        }
++        const spRaw = r.obj(o.spacing, `${path}.spacing`);
++        const spacing = { collector: NaN, local: NaN };
++        if (spRaw) {
++          for (const k of ['collector', 'local'] as const) {
++            spacing[k] = r.num(spRaw, k, `${path}.spacing`);
++            if (isNum(spacing[k]) && !(spacing[k] > 0)) r.problems.push(`${path}.spacing.${k}: must be > 0`);
++          }
++        }
++        let fringe: { depth: number; growth: InformalGrowth } | undefined;
++        if (o.fringe !== undefined) {
++          const fr = r.obj(o.fringe, `${path}.fringe`);
++          if (fr) {
++            const depth = r.num(fr, 'depth', `${path}.fringe`);
++            if (isNum(depth) && !(depth > 0)) r.problems.push(`${path}.fringe.depth: must be > 0`);
++            fringe = { depth, growth: parseGrowth(fr.growth, `${path}.fringe.growth`) };
++          }
++        }
++        out.districts[id] = { ...common, style: 'formal', field, spacing, ...(fringe ? { fringe } : {}) };
++      } else if (o.style === 'informal') {
++        const growth = parseGrowth(o.growth, `${path}.growth`);
+         out.districts[id] = { ...common, style: 'informal', growth };
+       } else {
+         r.problems.push(`${path}.style: expected "formal" or "informal", got ${JSON.stringify(o.style)}`);
+diff --git a/src/world/streets/generate.ts b/src/world/streets/generate.ts
+index 59ad071..c52fcbb 100644
+--- a/src/world/streets/generate.ts
++++ b/src/world/streets/generate.ts
+@@ -165,8 +165,8 @@ export const DEFAULT_PARAMS: GeneratorParams = {
+   informalSpurProbability: 0.6,
+   informalSpurSegments: 2,
+   informalSpurLengthRatio: 0.5,
+-  informalCoverageGap: 55,
+-  informalCoveragePasses: 3,
++  informalCoverageGap: 45,
++  informalCoveragePasses: 8,
+   informalInfillArea: 16000,
+   informalInfillPasses: 3,
+   informalMaxProposals: 40000,
+@@ -275,15 +275,23 @@ export function generateStreets(spec: WorldSpec, slice: WorldSlice, options: Gen
+   let connectors = 0;
+   const districtIds = Object.keys(spec.streetStyles.districts).sort();
+   // 3. Formal districts first, then informal ones (so organic growth can join formal streets).
+-  for (const phase of ['formal', 'informal'] as const) {
++  // A formal district with a `fringe` runs its formal passes in the core only, then grows its fringe
++  // organically (phase 'fringe', after every formal district, with the same forked rng stream order).
++  for (const phase of ['formal', 'informal', 'fringe'] as const) {
+     for (const id of districtIds) {
+       const style = spec.streetStyles.districts[id] as StreetStyleDistrict;
+-      if (style.style !== phase) continue;
++      if (phase === 'fringe' ? !(style.style === 'formal' && style.fringe) : style.style !== phase) continue;
+       const region = createDistrictRegion(spec, slice, id, frameIndex);
+       if (!region) continue; // no cells inside the active area
+-      const ctx = makeContext(spec, slice, graph, region, root.fork(`streets:${id}`), params, () => connectors++);
+-      if (style.style === 'formal') generateFormal(ctx, style);
+-      else (options.informal ?? growInformalDistrict)({ ...ctx, style });
++      const ctx = makeContext(spec, slice, graph, region, root.fork(phase === 'fringe' ? `fringe:${id}` : `streets:${id}`), params, () => connectors++);
++      if (phase === 'fringe' && style.style === 'formal' && style.fringe) {
++        (options.informal ?? growInformalDistrict)({ ...ctx, style: { ...style, style: 'informal', growth: style.fringe.growth } });
++        linkFloatingStreets(ctx);
++      } else if (style.style === 'formal') {
++        const depth = style.fringe?.depth;
++        const core: DistrictContext = depth === undefined ? ctx : { ...ctx, allowed: (cls, p) => ctx.allowed(cls, p) && region.clearance(p, depth + 1) >= depth };
++        generateFormal(core, style);
++      } else (options.informal ?? growInformalDistrict)({ ...ctx, style });
+       mark(`district:${id}`);
+     }
+   }
+@@ -651,6 +659,73 @@ function makeContext(
+   };
+ }
+ 
++/**
++ * Hybrid districts: a core pocket the fringe growth never reached would be dropped as floating
++ * (removeFloatingStreets). Each such street component of the district is joined to the anchored
++ * network (one with an avenue) by the shortest clear, allowed straight local street between two
++ * of their nodes, within FLOAT_LINK_REACH. Deterministic: ties break by node id.
++ */
++const FLOAT_LINK_REACH = 420;
++export function linkFloatingStreets(ctx: DistrictContext): number {
++  const { graph } = ctx;
++  const isStreetE = (e: GraphEdge) => e.cls !== 'frame';
++  let linked = 0;
++  for (let round = 0; round < 12; round++) {
++    const parent = new Map<number, number>();
++    const find = (x: number): number => {
++      let r = x;
++      while (parent.get(r) !== r) r = parent.get(r) as number;
++      return r;
++    };
++    const streets = graph.edges().filter(isStreetE);
++    for (const e of streets) for (const n of [e.a, e.b]) if (!parent.has(n)) parent.set(n, n);
++    for (const e of streets) {
++      const ra = find(e.a);
++      const rb = find(e.b);
++      if (ra !== rb) parent.set(Math.max(ra, rb), Math.min(ra, rb));
++    }
++    const anchored = new Set<number>();
++    for (const e of streets) if (e.fixed) anchored.add(find(e.a));
++    const nodesOf = new Map<number, number[]>();
++    for (const [n] of parent) {
++      const r = find(n);
++      const l = nodesOf.get(r);
++      if (l) l.push(n);
++      else nodesOf.set(r, [n]);
++    }
++    const floating = [...nodesOf.keys()].filter((r) => !anchored.has(r)).sort((a, b) => a - b);
++    const target = [...nodesOf.entries()].filter(([r]) => anchored.has(r)).flatMap(([, l]) => l).sort((a, b) => a - b);
++    let progress = false;
++    for (const r of floating) {
++      const cand: { d: number; a: number; b: number }[] = [];
++      for (const a of nodesOf.get(r) as number[]) {
++        const pa = graph.node(a);
++        for (const b of target) {
++          const pb = graph.node(b);
++          const d = Math.hypot(pa.x - pb.x, pa.y - pb.y);
++          if (d <= FLOAT_LINK_REACH && d >= 12) cand.push({ d, a, b });
++        }
++      }
++      cand.sort((x, y) => x.d - y.d || x.a - y.a || x.b - y.b);
++      for (const c of cand.slice(0, 40)) {
++        const pa = graph.node(c.a);
++        const pb = graph.node(c.b);
++        if (firstHit(graph, pa, pb, (e) => isStreetE(e) && e.a !== c.a && e.b !== c.a && e.a !== c.b && e.b !== c.b)) continue;
++        let ok = true;
++        for (let t = 0.1; t < 0.95 && ok; t += 0.1) ok = ctx.allowed('local', { x: pa.x + (pb.x - pa.x) * t, y: pa.y + (pb.y - pa.y) * t });
++        if (!ok) continue;
++        graph.addSegment({ x: pa.x, y: pa.y }, { x: pb.x, y: pb.y }, ctx.propsFor('local'));
++        linked++;
++        progress = true;
++        break;
++      }
++      if (progress) break;
++    }
++    if (!progress) break;
++  }
++  return linked;
++}
++
+ /** First proper crossing of segment a→b with an edge accepted by pred (smallest t). */
+ export function firstHit(
+   graph: PlanarGraph,

@@ -10,6 +10,8 @@
 | Mechanical change across files (rename, wire an import, add a field) | `implementer` | haiku (set `model: haiku`) |
 | New module, gameplay system, anything needing design judgment | `implementer` | sonnet |
 | Fix that already failed once on haiku | `fixer` | sonnet (set `model: sonnet`) |
+| Measure street geometry of a real sample into profile numbers (engine up, read-only) | `street-analyst` | sonnet |
+| Build/tune the profile-driven street section until its render looks right (one outcome, own renderer) | `section-generator` | sonnet |
 | Architecture decisions, cross-system redesign | ask the director first | (opus only if approved) |
 
 Pass `model` on the Agent call to override an agent's default.

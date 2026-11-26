@@ -23,6 +23,10 @@ check it, and report to the director (the user).
    director's call.
 7. **No commits or pushes** unless the director asks.
 
+## Outcome first
+
+Judge every card by what the director can SEE (a render or an in-game screenshot), not by plumbing. When the goal is the street generator (section profile, ports, enclosed borders), start from `runs/2026-11-26-handoff-section-generator.md`, brief `street-analyst` for the numbers and `section-generator` for the build, and plan the retirement of the old street techniques BEFORE any generator code. Start the session inside `transito/` so project agents load.
+
 ## Loop
 
 ```
@@ -58,6 +62,8 @@ touch the same files.
 | `fixer` | haiku | one specific, already-diagnosed failure |
 | `verifier` | haiku | run checks and report raw results; never edits |
 | `scout` | haiku | find files/symbols/facts; never edits |
+| `street-analyst` | sonnet | measure a REAL sample (geospatial engine) into section-profile numbers; read-only on the repo, never stores real geometry; the main session keeps the engine up |
+| `section-generator` | sonnet | own the street-section outcome: profile-driven generator (enclosed borders, 1-2 openings as ports, block fill), looks at its own top-down PNG renders; one at a time on `src/world/streets/*` |
 
 ## State
 

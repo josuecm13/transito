@@ -20,7 +20,7 @@ If a card fails twice for scope reasons (agent ran out of room, touched unrelate
 ```
 ### CARD-<n>: <imperative title>
 Act / milestone: <e.g. Act 1 / H0>
-Agent: implementer | fixer | verifier | scout      Model: haiku | sonnet
+Agent: implementer | fixer | verifier | scout | street-analyst | section-generator      Model: haiku | sonnet
 Depends on: CARD-<m>, …
 Files (expected): <paths>
 Spec sources: <spec files/sections the agent must read>
